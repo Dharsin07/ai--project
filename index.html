@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous Research Assistant - AI-powered Research Summarization</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header/Navbar -->
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="nav-brand">
+                    <div class="logo">🧠</div>
+                    <div class="brand-text">
+                        <h1 class="brand-title">Autonomous Research Assistant</h1>
+                        <p class="brand-subtitle">AI-powered research summarization using LLMs & RAG</p>
+                    </div>
+                </div>
+                <div class="nav-controls">
+                    <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
+                        <span class="theme-icon">🌙</span>
+                    </button>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Hero/Input Section -->
+        <section class="hero-section">
+            <div class="container">
+                <div class="input-card">
+                    <h2 class="card-title">Ask Your Question</h2>
+                    <p class="card-description">Enter any question and get accurate, helpful answers powered by AI</p>
+                    
+                    <form id="researchForm" class="research-form">
+                        <div class="form-group">
+                            <label for="researchTopic" class="form-label">Your Question</label>
+                            <textarea 
+                                id="researchTopic" 
+                                name="researchTopic"
+                                class="form-textarea"
+                                placeholder="e.g., What are the benefits of machine learning in healthcare?"
+                                rows="4"
+                                required
+                            ></textarea>
+                        </div>
+
+                        <div class="form-controls">
+                            <div class="form-group">
+                                <label for="summaryType" class="form-label">Answer Type</label>
+                                <select id="summaryType" name="summaryType" class="form-select">
+                                    <option value="short">Short Answer</option>
+                                    <option value="detailed" selected>Detailed Answer</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="sourceCount" class="form-label">Number of Sources: <span id="sourceValue">5</span></label>
+                                <input 
+                                    type="range" 
+                                    id="sourceCount" 
+                                    name="sourceCount"
+                                    class="form-slider"
+                                    min="1" 
+                                    max="10" 
+                                    value="5"
+                                >
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary" id="generateBtn">
+                            <span class="btn-text">Get Answer</span>
+                            <span class="btn-loader" style="display: none;">
+                                <span class="spinner"></span>
+                            </span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Features Panel -->
+                <div class="features-panel">
+                    <div class="feature-card">
+                        <div class="feature-icon">🌐</div>
+                        <div class="feature-content">
+                            <h3 class="feature-title">Web Search Enabled</h3>
+                            <p class="feature-description">Real-time web search for latest information</p>
+                        </div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🔍</div>
+                        <div class="feature-content">
+                            <h3 class="feature-title">RAG-based Retrieval</h3>
+                            <p class="feature-description">Advanced retrieval-augmented generation</p>
+                        </div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🤖</div>
+                        <div class="feature-content">
+                            <h3 class="feature-title">AI Summarization</h3>
+                            <p class="feature-description">Intelligent content synthesis and analysis</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section class="results-section" id="resultsSection" style="display: none;">
+            <div class="container">
+                <div class="results-card">
+                    <div class="results-header">
+                        <h2 class="results-title">Your Answer</h2>
+                        <div class="results-actions">
+                            <button class="btn-secondary" id="copyBtn">
+                                <span class="btn-icon">📋</span>
+                                Copy Answer
+                            </button>
+                            <button class="btn-secondary" id="downloadBtn">
+                                <span class="btn-icon">📄</span>
+                                Download PDF
+                            </button>
+                            <button class="btn-secondary" id="clearBtn">
+                                <span class="btn-icon">🗑️</span>
+                                Clear Results
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="results-content">
+                        <!-- Question -->
+                        <div class="result-section">
+                            <h3 class="result-section-title">Your Question</h3>
+                            <div class="research-topic" id="researchTopicDisplay"></div>
+                        </div>
+
+                        <!-- AI Answer -->
+                        <div class="result-section">
+                            <h3 class="result-section-title">AI Answer</h3>
+                            <div class="summary-content" id="summaryContent"></div>
+                        </div>
+
+                        <!-- Sources Used -->
+                        <div class="result-section">
+                            <h3 class="result-section-title">Sources Used</h3>
+                            <ol class="sources-list" id="sourcesList"></ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p class="footer-text">© 2024 Autonomous Research Assistant. Powered by AI & RAG Technology.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
