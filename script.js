@@ -6,7 +6,6 @@ class ResearchAssistant {
     this.initElements();
     this.initEventListeners();
     this.initTheme();
-    this.mockData = this.generateMockData();
   }
 
   // Initialize DOM elements
@@ -132,26 +131,17 @@ class ResearchAssistant {
     this.setLoadingState(true);
 
     try {
-      // Try to call real API first
-      let response;
-      try {
-        console.log('🔄 Attempting real API call...');
-        response = await this.callRealAPI(topic, summaryType, sourceCount);
-        console.log('✅ Real API call successful');
-      } catch (apiError) {
-        console.log('⚠️ API unavailable, using mock data:', apiError.message);
-        // Fallback to mock data if API fails
-        await this.simulateAPICall();
-        response = this.generateMockResponse(topic, summaryType, sourceCount);
-        console.log('🎭 Using mock response');
-      }
+      // Call real API only - NO MOCK FALLBACK
+      console.log('🔄 Calling real Gemini API...');
+      const response = await this.callRealAPI(topic, summaryType, sourceCount);
+      console.log('✅ Real Gemini API call successful');
       
       // Display results
       this.displayResults(response);
       
     } catch (error) {
-      console.error('❌ Form submission error:', error);
-      this.showError('Failed to generate research brief. Please try again.');
+      console.error('❌ API call failed:', error);
+      this.showError('Failed to connect to AI service. Please check if the backend is running on http://localhost:8000');
     } finally {
       this.setLoadingState(false);
     }
@@ -187,8 +177,21 @@ class ResearchAssistant {
   // Call real API
   async callRealAPI(topic, summaryType, sourceCount) {
     try {
-      console.log('🚀 Calling real API with:', { topic, summaryType, sourceCount });
+      console.log('🚀 Calling real Gemini API with:', { topic, summaryType, sourceCount });
       
+      // First test if backend is reachable
+      console.log('🔍 Testing backend connection...');
+      const healthResponse = await fetch('http://localhost:8000/health');
+      console.log('📡 Health check status:', healthResponse.status);
+      
+      if (!healthResponse.ok) {
+        throw new Error('Backend health check failed');
+      }
+      
+      const healthData = await healthResponse.json();
+      console.log('💚 Backend health:', healthData);
+      
+      // Now call the research endpoint
       const response = await fetch('http://localhost:8000/research', {
         method: 'POST',
         headers: {
@@ -201,14 +204,17 @@ class ResearchAssistant {
         })
       });
 
-      console.log('📡 API Response status:', response.status);
+      console.log('📡 Research API Response status:', response.status);
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ API Error Response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('✅ API Response data:', data);
+      console.log('✅ Real Gemini API Response data:', data);
+      console.log('📝 Summary preview:', data.summary ? data.summary.substring(0, 100) + '...' : 'No summary');
       
       return {
         topic: data.topic,
@@ -218,36 +224,16 @@ class ResearchAssistant {
         timestamp: data.timestamp
       };
     } catch (error) {
-      console.error('❌ API call failed:', error);
+      console.error('❌ Gemini API call failed:', error);
+      console.error('🔍 Error details:', error.message);
+      
+      // Additional debugging info
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        console.error('🌐 Network error - Backend may not be running on http://localhost:8000');
+      }
+      
       throw error;
     }
-  }
-
-  // Generate mock response
-  generateMockResponse(topic, summaryType, sourceCount) {
-    const summaries = this.mockData.summaries[summaryType];
-    const summary = summaries[Math.floor(Math.random() * summaries.length)];
-    
-    // Replace placeholders with actual topic
-    const processedSummary = summary
-      .replace(/\[TOPIC\]/g, topic)
-      .replace(/\[TOPIC_LOWER\]/g, topic.toLowerCase());
-
-    // Select random sources
-    const sources = this.mockData.sources
-      .sort(() => Math.random() - 0.5)
-      .slice(0, sourceCount);
-
-    // Extract keywords
-    const keywords = this.extractKeywords(processedSummary);
-
-    return {
-      topic,
-      summary: processedSummary,
-      sources,
-      keywords,
-      timestamp: new Date().toISOString()
-    };
   }
 
   // Extract keywords from summary
