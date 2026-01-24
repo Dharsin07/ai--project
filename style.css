@@ -816,3 +816,52 @@ body {
     transform: translateY(0);
   }
 }
+
+/* RAG Components */
+.form-file {
+  width: 100%;
+  padding: 12px;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.form-file:hover {
+  border-color: var(--primary-color);
+  background: var(--primary-light);
+}
+
+.upload-status {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: var(--font-size-sm);
+}
+
+.upload-status.success {
+  background: var(--success);
+  color: white;
+}
+
+.upload-status.error {
+  background: var(--error);
+  color: white;
+}
+
+.rag-answer {
+  background: var(--surface);
+  padding: 16px;
+  border-radius: 8px;
+  border-left: 4px solid var(--primary-color);
+  margin-bottom: 16px;
+}
+
+.rag-upload-form,
+.rag-query-form {
+  max-width: 100%;
+}

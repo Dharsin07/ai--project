@@ -20,6 +20,20 @@ class ResearchAssistant {
     this.btnText = this.generateBtn.querySelector('.btn-text');
     this.btnLoader = this.generateBtn.querySelector('.btn-loader');
 
+    // RAG elements
+    this.ragUploadForm = document.getElementById('ragUploadForm');
+    this.pdfFile = document.getElementById('pdfFile');
+    this.uploadBtn = document.getElementById('uploadBtn');
+    this.uploadBtnText = this.uploadBtn.querySelector('.btn-text');
+    this.uploadBtnLoader = this.uploadBtn.querySelector('.btn-loader');
+    this.uploadStatus = document.getElementById('uploadStatus');
+    
+    this.ragQueryForm = document.getElementById('ragQueryForm');
+    this.ragQuestion = document.getElementById('ragQuestion');
+    this.ragQueryBtn = document.getElementById('ragQueryBtn');
+    this.ragQueryBtnText = this.ragQueryBtn.querySelector('.btn-text');
+    this.ragQueryBtnLoader = this.ragQueryBtn.querySelector('.btn-loader');
+
     // Results elements
     this.resultsSection = document.getElementById('resultsSection');
     this.researchTopicDisplay = document.getElementById('researchTopicDisplay');
@@ -32,6 +46,11 @@ class ResearchAssistant {
     // Theme elements
     this.themeToggle = document.getElementById('themeToggle');
     this.themeIcon = this.themeToggle.querySelector('.theme-icon');
+    
+    // Initialize RAG question as disabled until PDF is uploaded
+    this.ragQuestion.disabled = true;
+    this.ragQueryBtn.disabled = true;
+    this.ragQuestion.placeholder = "Please upload a PDF first...";
   }
 
   // Initialize event listeners
@@ -40,6 +59,18 @@ class ResearchAssistant {
     this.researchForm.addEventListener('submit', (e) => {
       e.preventDefault();
       this.handleFormSubmit();
+    });
+
+    // RAG upload form
+    this.ragUploadForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.handleRAGUpload();
+    });
+
+    // RAG query form
+    this.ragQueryForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.handleRAGQuery();
     });
 
     // Source count slider
@@ -485,6 +516,174 @@ class ResearchAssistant {
         }
       ]
     };
+  }
+
+  // Handle RAG PDF upload
+  async handleRAGUpload() {
+    const file = this.pdfFile.files[0];
+    
+    if (!file) {
+      this.showError('Please select a PDF file');
+      return;
+    }
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      this.showError('Please select a PDF file');
+      return;
+    }
+
+    this.setUploadLoadingState(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('http://localhost:8000/rag/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Upload failed');
+      }
+
+      const data = await response.json();
+      
+      this.uploadStatus.style.display = 'block';
+      this.uploadStatus.className = 'upload-status success';
+      this.uploadStatus.innerHTML = `
+        <strong>✅ Upload Successful!</strong><br>
+        File: ${data.filename}<br>
+        Chunks created: ${data.chunks_created}<br>
+        Total characters: ${data.total_characters}
+      `;
+
+      this.showSuccess('PDF uploaded successfully! You can now ask questions about it.');
+      
+      // Enable the question input and button
+      this.ragQuestion.disabled = false;
+      this.ragQueryBtn.disabled = false;
+      
+      // Add visual indicator that PDF is ready
+      this.ragQuestion.placeholder = "Ask a question about your uploaded PDF...";
+
+    } catch (error) {
+      console.error('Upload error:', error);
+      this.uploadStatus.style.display = 'block';
+      this.uploadStatus.className = 'upload-status error';
+      this.uploadStatus.innerHTML = `<strong>❌ Upload Failed:</strong> ${error.message}`;
+      this.showError('PDF upload failed');
+    } finally {
+      this.setUploadLoadingState(false);
+    }
+  }
+
+  // Handle RAG query
+  async handleRAGQuery() {
+    const question = this.ragQuestion.value.trim();
+
+    if (!question) {
+      this.showError('Please enter a question');
+      return;
+    }
+
+    this.setRAGQueryLoadingState(true);
+
+    try {
+      const response = await fetch('http://localhost:8000/rag/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: question
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Query failed');
+      }
+
+      const data = await response.json();
+      
+      // Display RAG results
+      this.displayRAGResults(data);
+
+    } catch (error) {
+      console.error('RAG query error:', error);
+      
+      // Show more specific error messages
+      if (error.message.includes('No PDF has been uploaded yet')) {
+        this.showError('Please upload a PDF document first before asking questions. Use the "Upload Document" section above.');
+      } else if (error.message.includes('Question cannot be empty')) {
+        this.showError('Please enter a question before submitting.');
+      } else {
+        this.showError('Query failed: ' + error.message);
+      }
+    } finally {
+      this.setRAGQueryLoadingState(false);
+    }
+  }
+
+  // Set upload loading state
+  setUploadLoadingState(isLoading) {
+    if (isLoading) {
+      this.uploadBtn.disabled = true;
+      this.uploadBtnText.style.display = 'none';
+      this.uploadBtnLoader.style.display = 'flex';
+      this.pdfFile.disabled = true;
+    } else {
+      this.uploadBtn.disabled = false;
+      this.uploadBtnText.style.display = 'inline';
+      this.uploadBtnLoader.style.display = 'none';
+      this.pdfFile.disabled = false;
+    }
+  }
+
+  // Set RAG query loading state
+  setRAGQueryLoadingState(isLoading) {
+    if (isLoading) {
+      this.ragQueryBtn.disabled = true;
+      this.ragQueryBtnText.style.display = 'none';
+      this.ragQueryBtnLoader.style.display = 'flex';
+      this.ragQuestion.disabled = true;
+    } else {
+      this.ragQueryBtn.disabled = false;
+      this.ragQueryBtnText.style.display = 'inline';
+      this.ragQueryBtnLoader.style.display = 'none';
+      this.ragQuestion.disabled = false;
+    }
+  }
+
+  // Display RAG results
+  displayRAGResults(data) {
+    // Display question
+    this.researchTopicDisplay.textContent = data.question;
+
+    // Display answer
+    this.summaryContent.innerHTML = `<div class="rag-answer">${data.answer}</div>`;
+
+    // Display matched chunks as sources
+    this.sourcesList.innerHTML = '';
+    data.matched_chunks.forEach((chunk, index) => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <strong>Document Chunk ${index + 1}</strong><br>
+        <span style="color: var(--text-secondary); font-size: var(--font-size-sm);">${chunk.substring(0, 200)}...</span>
+      `;
+      this.sourcesList.appendChild(li);
+    });
+
+    // Show results section
+    this.resultsSection.style.display = 'block';
+    this.resultsSection.classList.add('fade-in');
+    
+    // Scroll to results
+    setTimeout(() => {
+      this.resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   }
 }
 

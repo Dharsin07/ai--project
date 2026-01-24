@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -8,11 +8,15 @@ from typing import List, Optional
 import random
 from datetime import datetime
 import re
+import PyPDF2
+import numpy as np
+import io
+import math
 
 load_dotenv()
 
 # Initialize Gemini API
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyACIGRJJSukfCkCMLS2sUIgn4DGVVAm8YY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("GEMINI_API_KEY not found in environment variables")
 
@@ -31,6 +35,9 @@ app.add_middleware(
 
 # Initialize Gemini model
 model = genai.GenerativeModel('gemini-2.5-flash')
+
+# Initialize RAG components (simplified)
+stored_chunks = []
 
 class SummarizeRequest(BaseModel):
     text: str
@@ -54,6 +61,14 @@ class ResearchResponse(BaseModel):
     keywords: List[str]
     timestamp: str
     processing_time: float
+
+class RAGQueryRequest(BaseModel):
+    question: str
+
+class RAGQueryResponse(BaseModel):
+    answer: str
+    matched_chunks: List[str]
+    question: str
 
 # Mock data for sources
 MOCK_SOURCES = [
@@ -131,6 +146,64 @@ def extract_keywords(text: str, max_keywords: int = 5) -> List[str]:
     # Sort by frequency and return top keywords
     keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
     return [word.capitalize() for word, _ in keywords[:max_keywords]]
+
+def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """Extract text from PDF bytes"""
+    pdf_file = io.BytesIO(pdf_bytes)
+    pdf_reader = PyPDF2.PdfReader(pdf_file)
+    text = ""
+    
+    for page in pdf_reader.pages:
+        text += page.extract_text() + "\n"
+    
+    return text
+
+def split_text_into_chunks(text: str, chunk_size: int = 600, overlap: int = 100) -> List[str]:
+    """Split text into overlapping chunks"""
+    if len(text) <= chunk_size:
+        return [text]
+    
+    chunks = []
+    start = 0
+    
+    while start < len(text):
+        end = start + chunk_size
+        if end >= len(text):
+            chunks.append(text[start:])
+            break
+        
+        # Try to break at sentence or word boundary
+        chunk = text[start:end]
+        last_period = chunk.rfind('. ')
+        last_space = chunk.rfind(' ')
+        
+        if last_period > end - 100:  # Prefer sentence break
+            end = start + last_period + 2
+        elif last_space > end - 50:  # Fall back to word break
+            end = start + last_space
+        
+        chunks.append(text[start:end])
+        start = end - overlap
+    
+    return [chunk.strip() for chunk in chunks if chunk.strip()]
+
+def simple_text_similarity(query: str, chunks: List[str], top_k: int = 3) -> List[str]:
+    """Simple text similarity using keyword matching"""
+    query_words = set(query.lower().split())
+    scored_chunks = []
+    
+    for chunk in chunks:
+        chunk_words = set(chunk.lower().split())
+        # Jaccard similarity
+        intersection = len(query_words.intersection(chunk_words))
+        union = len(query_words.union(chunk_words))
+        score = intersection / union if union > 0 else 0
+        
+        scored_chunks.append((chunk, score))
+    
+    # Sort by score and return top_k
+    scored_chunks.sort(key=lambda x: x[1], reverse=True)
+    return [chunk for chunk, score in scored_chunks[:top_k]]
 
 async def generate_with_gemini(prompt: str) -> str:
     """Generate response using Gemini API"""
@@ -256,13 +329,95 @@ async def generate_research_brief(request: ResearchRequest):
         print(f"Error processing research request: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.post("/rag/upload")
+async def upload_pdf(file: UploadFile = File(...)):
+    """Upload and process PDF for RAG"""
+    global stored_chunks
+    
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+    
+    try:
+        # Read PDF content
+        pdf_bytes = await file.read()
+        
+        # Extract text
+        text = extract_text_from_pdf(pdf_bytes)
+        
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="No text could be extracted from PDF")
+        
+        # Split into chunks
+        chunks = split_text_into_chunks(text)
+        
+        if not chunks:
+            raise HTTPException(status_code=400, detail="No valid chunks created from PDF")
+        
+        # Store chunks (simplified - no embeddings)
+        stored_chunks = chunks
+        
+        return {
+            "message": f"Successfully processed PDF",
+            "filename": file.filename,
+            "chunks_created": len(chunks),
+            "total_characters": len(text)
+        }
+        
+    except Exception as e:
+        print(f"Error processing PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"PDF processing failed: {str(e)}")
+
+@app.post("/rag/query", response_model=RAGQueryResponse)
+async def query_rag(request: RAGQueryRequest):
+    """Query the RAG system"""
+    global stored_chunks
+    
+    if not request.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+    
+    if not stored_chunks:
+        raise HTTPException(status_code=400, detail="No PDF has been uploaded yet")
+    
+    try:
+        # Find similar chunks using simple text similarity
+        matched_chunks = simple_text_similarity(request.question, stored_chunks, top_k=3)
+        
+        # Combine context
+        context = "\n\n---\n\n".join(matched_chunks)
+        
+        # Generate response with strict prompt
+        prompt = f"""
+        Answer the following question using ONLY the provided context. 
+        If the answer is not present in the context, say "Not found in the document."
+        
+        Context:
+        {context}
+        
+        Question: {request.question}
+        
+        Answer:
+        """
+        
+        answer = await generate_with_gemini(prompt)
+        
+        return RAGQueryResponse(
+            answer=answer.strip(),
+            matched_chunks=matched_chunks,
+            question=request.question
+        )
+        
+    except Exception as e:
+        print(f"Error querying RAG: {e}")
+        raise HTTPException(status_code=500, detail="RAG query failed")
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "gemini_status": "connected"
+        "gemini_status": "connected",
+        "rag_status": "ready" if stored_chunks else "no_document"
     }
 
 @app.get("/")

@@ -84,6 +84,35 @@
                     </form>
                 </div>
 
+                <!-- RAG Upload Section -->
+                <div class="input-card">
+                    <h2 class="card-title">Upload PDF for RAG</h2>
+                    <p class="card-description">Upload a PDF document to enable context-based Q&A</p>
+                    
+                    <form id="ragUploadForm" class="rag-upload-form">
+                        <div class="form-group">
+                            <label for="pdfFile" class="form-label">Choose PDF File</label>
+                            <input 
+                                type="file" 
+                                id="pdfFile" 
+                                name="pdfFile"
+                                class="form-file"
+                                accept=".pdf"
+                                required
+                            >
+                        </div>
+
+                        <button type="submit" class="btn-primary" id="uploadBtn">
+                            <span class="btn-text">Upload PDF</span>
+                            <span class="btn-loader" style="display: none;">
+                                <span class="spinner"></span>
+                            </span>
+                        </button>
+                    </form>
+                    
+                    <div id="uploadStatus" class="upload-status" style="display: none;"></div>
+                </div>
+
                 <!-- Features Panel -->
                 <div class="features-panel">
                     <div class="feature-card">
@@ -107,6 +136,37 @@
                             <p class="feature-description">Intelligent content synthesis and analysis</p>
                         </div>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RAG Query Section -->
+        <section class="hero-section">
+            <div class="container">
+                <div class="input-card">
+                    <h2 class="card-title">Ask About Your Document</h2>
+                    <p class="card-description">Ask questions about the uploaded PDF document</p>
+                    
+                    <form id="ragQueryForm" class="rag-query-form">
+                        <div class="form-group">
+                            <label for="ragQuestion" class="form-label">Your Question</label>
+                            <textarea 
+                                id="ragQuestion" 
+                                name="ragQuestion"
+                                class="form-textarea"
+                                placeholder="e.g., What is the main conclusion of this document?"
+                                rows="3"
+                                required
+                            ></textarea>
+                        </div>
+
+                        <button type="submit" class="btn-primary" id="ragQueryBtn">
+                            <span class="btn-text">Ask Document</span>
+                            <span class="btn-loader" style="display: none;">
+                                <span class="spinner"></span>
+                            </span>
+                        </button>
+                    </form>
                 </div>
             </div>
         </section>
