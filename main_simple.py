@@ -13,37 +13,39 @@ import numpy as np
 import io
 import math
 import json
-from sentence_transformers import SentenceTransformer
-import faiss
-import uuid
+from collections import Counter
 
 load_dotenv()
 
 # Initialize Gemini API
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
-    raise RuntimeError("GEMINI_API_KEY not found in environment variables")
+    print("⚠️ GEMINI_API_KEY not found in environment variables")
+    print("Please set up your .env file with a valid Gemini API key")
+    # Don't raise error for demo purposes
 
-genai.configure(api_key=GEMINI_API_KEY)
+try:
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    GEMINI_AVAILABLE = True
+    print("✅ Gemini API initialized successfully")
+except Exception as e:
+    print(f"⚠️ Gemini API initialization failed: {e}")
+    GEMINI_AVAILABLE = False
 
-app = FastAPI(title="AI Research Assistant API", description="Powered by Google Gemini API")
+app = FastAPI(title="AI Research Assistant API", description="Simplified Version")
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend domain
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize Gemini model
-model = genai.GenerativeModel('gemini-2.5-flash')
-
-# Initialize RAG components with vector database
+# Initialize RAG components (simplified)
 stored_chunks = []
-vector_db = None
-embedding_model = None
 document_metadata = []
 chunk_metadata = []
 
@@ -84,15 +86,6 @@ class ChunkMetadata(BaseModel):
     chunk_index: int
     text_preview: str
     word_count: int
-
-class VectorSearchRequest(BaseModel):
-    query: str
-    top_k: int = 5
-
-class VectorSearchResponse(BaseModel):
-    query: str
-    matches: List[Dict[str, Any]]
-    answer: str
 
 class RAGQueryRequest(BaseModel):
     question: str
@@ -151,7 +144,7 @@ def generate_mock_sources(topic: str, count: int) -> List[Source]:
             authors=source_data["authors"],
             url=source_data["url"],
             year=source_data["year"],
-            relevance_score=round(0.7 + random.random() * 0.3, 2)  # 0.7 to 1.0
+            relevance_score=round(0.7 + random.random() * 0.3, 2)
         )
         sources.append(source)
     
@@ -159,7 +152,6 @@ def generate_mock_sources(topic: str, count: int) -> List[Source]:
 
 def extract_keywords(text: str, max_keywords: int = 5) -> List[str]:
     """Extract keywords from text using simple frequency analysis"""
-    # Common words to exclude
     stop_words = {
         'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 
         'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 
@@ -167,146 +159,83 @@ def extract_keywords(text: str, max_keywords: int = 5) -> List[str]:
         'can', 'must', 'shall', 'this', 'that', 'these', 'those', 'a', 'an'
     }
     
-    # Clean and tokenize text
     words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-    
-    # Count word frequencies
     word_freq = {}
     for word in words:
         if word not in stop_words:
             word_freq[word] = word_freq.get(word, 0) + 1
     
-    # Sort by frequency and return top keywords
     keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
     return [word.capitalize() for word, _ in keywords[:max_keywords]]
 
-def initialize_embedding_model():
-    """Initialize the sentence transformer model"""
-    global embedding_model
-    if embedding_model is None:
-        print("🔄 Loading embedding model...")
-        embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        print("✅ Embedding model loaded successfully")
-    return embedding_model
-
-def extract_text_from_pdf_with_pages(pdf_bytes: bytes) -> tuple[List[str], List[int]]:
-    """Extract text from PDF bytes with page numbers"""
+def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """Extract text from PDF bytes"""
     pdf_file = io.BytesIO(pdf_bytes)
     pdf_reader = PyPDF2.PdfReader(pdf_file)
-    pages_text = []
-    page_numbers = []
+    text = ""
     
-    for page_num, page in enumerate(pdf_reader.pages, 1):
-        text = page.extract_text()
-        if text.strip():
-            pages_text.append(text)
-            page_numbers.append(page_num)
+    for page in pdf_reader.pages:
+        text += page.extract_text() + "\n"
     
-    return pages_text, page_numbers
+    return text
 
-def split_text_into_meaningful_chunks(text: str, chunk_size: int = 250, overlap: int = 50) -> List[str]:
-    """Split text into meaningful chunks of 200-300 words"""
-    words = text.split()
-    if len(words) <= chunk_size:
+def split_text_into_chunks(text: str, chunk_size: int = 600, overlap: int = 100) -> List[str]:
+    """Split text into overlapping chunks"""
+    if len(text) <= chunk_size:
         return [text]
     
     chunks = []
     start = 0
     
-    while start < len(words):
+    while start < len(text):
         end = start + chunk_size
-        
-        # Try to break at sentence boundary
-        chunk_words = words[start:end]
-        chunk_text = ' '.join(chunk_words)
-        
-        # Look for sentence endings near the chunk boundary
-        sentence_endings = ['. ', '! ', '? ', '\n']
-        best_break = -1
-        
-        for i in range(min(50, len(chunk_words))):  # Look back up to 50 words
-            word_idx = len(chunk_words) - 1 - i
-            if word_idx >= 0:
-                word = chunk_words[word_idx]
-                if any(word.endswith(ending) for ending in sentence_endings):
-                    best_break = word_idx + 1
-                    break
-        
-        if best_break > 0:
-            chunk_words = chunk_words[:best_break]
-            chunk_text = ' '.join(chunk_words)
-            start = start + best_break - overlap
-        else:
-            start = end - overlap
-        
-        chunks.append(chunk_text.strip())
-        
-        if start >= len(words):
+        if end >= len(text):
+            chunks.append(text[start:])
             break
+        
+        # Try to break at sentence or word boundary
+        chunk = text[start:end]
+        last_period = chunk.rfind('. ')
+        last_space = chunk.rfind(' ')
+        
+        if last_period > end - 100:
+            end = start + last_period + 2
+        elif last_space > end - 50:
+            end = start + last_space
+        
+        chunks.append(text[start:end])
+        start = end - overlap
     
-    return [chunk for chunk in chunks if len(chunk.split()) >= 50]  # Filter very small chunks
+    return [chunk.strip() for chunk in chunks if chunk.strip()]
 
-def generate_embeddings(texts: List[str]) -> np.ndarray:
-    """Generate embeddings for a list of texts"""
-    model = initialize_embedding_model()
-    print(f"🔄 Generating embeddings for {len(texts)} chunks...")
-    embeddings = model.encode(texts, show_progress_bar=True)
-    print("✅ Embeddings generated successfully")
-    return embeddings
-
-def create_vector_database(embeddings: np.ndarray) -> faiss.IndexFlatIP:
-    """Create FAISS vector database"""
-    dimension = embeddings.shape[1]
+def simple_text_similarity(query: str, chunks: List[str], top_k: int = 3) -> List[str]:
+    """Simple text similarity using keyword matching"""
+    query_words = set(query.lower().split())
+    scored_chunks = []
     
-    # Normalize embeddings for cosine similarity
-    normalized_embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
+    for chunk in chunks:
+        chunk_words = set(chunk.lower().split())
+        intersection = len(query_words.intersection(chunk_words))
+        union = len(query_words.union(chunk_words))
+        score = intersection / union if union > 0 else 0
+        
+        scored_chunks.append((chunk, score))
     
-    # Create FAISS index
-    index = faiss.IndexFlatIP(dimension)
-    index.add(normalized_embeddings)
-    
-    print(f"✅ Vector database created with {index.ntotal} embeddings")
-    return index
-
-def search_vector_database(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-    """Search vector database for similar chunks"""
-    global vector_db, stored_chunks, chunk_metadata
-    
-    if vector_db is None or not stored_chunks:
-        return []
-    
-    # Generate query embedding
-    model = initialize_embedding_model()
-    query_embedding = model.encode([query])
-    query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
-    
-    # Search vector database
-    scores, indices = vector_db.search(query_embedding, min(top_k, len(stored_chunks)))
-    
-    results = []
-    for i, (score, idx) in enumerate(zip(scores[0], indices[0])):
-        if idx < len(stored_chunks):
-            result = {
-                'chunk_text': stored_chunks[idx],
-                'similarity_score': float(score),
-                'chunk_id': chunk_metadata[idx].chunk_id if idx < len(chunk_metadata) else f"chunk_{idx}",
-                'document_name': chunk_metadata[idx].document_name if idx < len(chunk_metadata) else "unknown",
-                'page_number': chunk_metadata[idx].page_number if idx < len(chunk_metadata) else 0,
-                'chunk_index': chunk_metadata[idx].chunk_index if idx < len(chunk_metadata) else idx,
-                'rank': i + 1
-            }
-            results.append(result)
-    
-    return results
+    scored_chunks.sort(key=lambda x: x[1], reverse=True)
+    return [chunk for chunk, score in scored_chunks[:top_k]]
 
 async def generate_with_gemini(prompt: str) -> str:
     """Generate response using Gemini API"""
+    if not GEMINI_AVAILABLE:
+        # Fallback mock response
+        return f"This is a mock response because Gemini API is not available. The prompt was: {prompt[:100]}..."
+    
     try:
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
         print(f"Error generating with Gemini: {e}")
-        raise HTTPException(status_code=500, detail="AI generation failed")
+        return f"Error generating response: {str(e)}"
 
 @app.post("/summarize")
 async def summarize(req: SummarizeRequest):
@@ -330,7 +259,6 @@ async def summarize(req: SummarizeRequest):
         """
         
         summary = await generate_with_gemini(prompt)
-        
         return {"summary": summary.strip()}
         
     except HTTPException:
@@ -345,7 +273,6 @@ async def generate_research_brief(request: ResearchRequest):
     start_time = datetime.now()
     
     try:
-        # Validate input
         if not request.topic or len(request.topic.strip()) < 10:
             raise HTTPException(status_code=400, detail="Topic must be at least 10 characters long")
         
@@ -355,7 +282,6 @@ async def generate_research_brief(request: ResearchRequest):
         if not 1 <= request.source_count <= 10:
             raise HTTPException(status_code=400, detail="Source count must be between 1 and 10")
         
-        # Generate summary using Gemini
         if request.summary_type == "short":
             prompt = f"""
             Answer this question accurately and concisely: "{request.topic}"
@@ -394,15 +320,9 @@ async def generate_research_brief(request: ResearchRequest):
         summary_text = await generate_with_gemini(prompt)
         summary_text = summary_text.strip()
         
-        print(f"✅ Generated Gemini response for: {request.topic}")
-        
-        # Generate sources
         sources = generate_mock_sources(request.topic, request.source_count)
-        
-        # Extract keywords from the AI response
         keywords = extract_keywords(summary_text)
         
-        # Calculate processing time
         end_time = datetime.now()
         processing_time = (end_time - start_time).total_seconds()
         
@@ -425,89 +345,67 @@ async def generate_research_brief(request: ResearchRequest):
 
 @app.post("/rag/upload")
 async def upload_pdf(file: UploadFile = File(...)):
-    """Upload and process PDF for RAG with vector database"""
-    global stored_chunks, vector_db, chunk_metadata, document_metadata
+    """Upload and process PDF for RAG (simplified version)"""
+    global stored_chunks, document_metadata, chunk_metadata
     
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
     
     try:
-        # Read PDF content
         pdf_bytes = await file.read()
         file_size = len(pdf_bytes)
         
         print(f"🔄 Processing PDF: {file.filename} ({file_size} bytes)")
         
-        # Extract text with page numbers
-        pages_text, page_numbers = extract_text_from_pdf_with_pages(pdf_bytes)
+        text = extract_text_from_pdf(pdf_bytes)
         
-        if not pages_text:
+        if not text.strip():
             raise HTTPException(status_code=400, detail="No text could be extracted from PDF")
         
-        print(f"📄 Extracted text from {len(pages_text)} pages")
+        chunks = split_text_into_chunks(text)
         
-        # Split into meaningful chunks
-        all_chunks = []
-        new_chunk_metadata = []
-        
-        for page_idx, (page_text, page_num) in enumerate(zip(pages_text, page_numbers)):
-            page_chunks = split_text_into_meaningful_chunks(page_text)
-            
-            for chunk_idx, chunk in enumerate(page_chunks):
-                chunk_id = str(uuid.uuid4())[:8]  # Short unique ID
-                
-                metadata = ChunkMetadata(
-                    chunk_id=chunk_id,
-                    document_name=file.filename,
-                    page_number=page_num,
-                    chunk_index=chunk_idx,
-                    text_preview=chunk[:100] + "..." if len(chunk) > 100 else chunk,
-                    word_count=len(chunk.split())
-                )
-                
-                all_chunks.append(chunk)
-                new_chunk_metadata.append(metadata)
-        
-        if not all_chunks:
+        if not chunks:
             raise HTTPException(status_code=400, detail="No valid chunks created from PDF")
         
-        print(f"🔢 Created {len(all_chunks)} chunks")
+        # Create metadata for chunks
+        new_chunk_metadata = []
+        for i, chunk in enumerate(chunks):
+            metadata = ChunkMetadata(
+                chunk_id=f"chunk_{i}_{hash(chunk) % 10000}",
+                document_name=file.filename,
+                page_number=1,  # Simplified - not tracking individual pages
+                chunk_index=i,
+                text_preview=chunk[:100] + "..." if len(chunk) > 100 else chunk,
+                word_count=len(chunk.split())
+            )
+            new_chunk_metadata.append(metadata)
         
-        # Generate embeddings
-        embeddings = generate_embeddings(all_chunks)
-        
-        # Create vector database
-        vector_db = create_vector_database(embeddings)
-        
-        # Store chunks and metadata
-        stored_chunks = all_chunks
+        stored_chunks = chunks
         chunk_metadata = new_chunk_metadata
         
         # Create document metadata
         doc_metadata = DocumentMetadata(
             document_name=file.filename,
-            total_pages=len(pages_text),
-            total_chunks=len(all_chunks),
+            total_pages=1,  # Simplified
+            total_chunks=len(chunks),
             upload_timestamp=datetime.now().isoformat(),
             file_size=file_size
         )
-        
-        # Update document metadata list
         document_metadata = [doc_metadata]
         
-        total_characters = sum(len(chunk) for chunk in all_chunks)
+        total_characters = sum(len(chunk) for chunk in chunks)
         
         print(f"✅ Successfully processed {file.filename}")
-        print(f"📊 Stats: {len(pages_text)} pages, {len(all_chunks)} chunks, {total_characters} characters")
+        print(f"📊 Stats: {len(chunks)} chunks, {total_characters} characters")
         
         return {
-            "message": f"Successfully processed PDF with vector database",
+            "message": f"Successfully processed PDF (simplified version)",
             "filename": file.filename,
-            "chunks_created": len(all_chunks),
+            "chunks_created": len(chunks),
             "total_characters": total_characters,
-            "pages_processed": len(pages_text),
-            "vector_db_size": vector_db.ntotal,
-            "embedding_dimension": embeddings.shape[1],
+            "pages_processed": 1,  # Simplified
+            "vector_db_size": len(chunks),  # Mock vector DB size
+            "embedding_dimension": 384,  # Mock dimension
             "document_metadata": doc_metadata.dict()
         }
         
@@ -517,44 +415,25 @@ async def upload_pdf(file: UploadFile = File(...)):
 
 @app.post("/rag/query", response_model=RAGQueryResponse)
 async def query_rag(request: RAGQueryRequest):
-    """Query the RAG system using vector database"""
+    """Query the RAG system (simplified version)"""
     global stored_chunks, chunk_metadata
     
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     
-    if not stored_chunks or vector_db is None:
+    if not stored_chunks:
         raise HTTPException(status_code=400, detail="No PDF has been uploaded yet")
     
     try:
-        print(f"🔍 Searching vector database for: {request.question}")
+        print(f"🔍 Searching for: {request.question}")
         
-        # Search vector database for relevant chunks
-        search_results = search_vector_database(request.question, top_k=3)
+        matched_chunks = simple_text_similarity(request.question, stored_chunks, top_k=3)
         
-        if not search_results:
+        if not matched_chunks:
             raise HTTPException(status_code=404, detail="No relevant information found")
         
-        # Extract matched chunks and metadata
-        matched_chunks = [result['chunk_text'] for result in search_results]
-        matched_metadata = []
-        
-        for result in search_results:
-            # Find corresponding metadata
-            metadata = next(
-                (meta for meta in chunk_metadata if meta.chunk_id == result['chunk_id']),
-                None
-            )
-            if metadata:
-                matched_metadata.append(metadata)
-        
-        # Combine context
         context = "\n\n---\n\n".join(matched_chunks)
         
-        print(f"📝 Found {len(search_results)} relevant chunks")
-        print(f"🎯 Top similarity score: {search_results[0]['similarity_score']:.3f}")
-        
-        # Generate response with strict prompt
         prompt = f"""
         Answer the following question using ONLY the provided context. 
         If the answer is not present in the context, say "Not found in the document."
@@ -569,11 +448,20 @@ async def query_rag(request: RAGQueryRequest):
         
         answer = await generate_with_gemini(prompt)
         
+        # Get metadata for matched chunks
+        matched_metadata = []
+        for chunk in matched_chunks:
+            # Find corresponding metadata
+            for meta in chunk_metadata:
+                if meta.text_preview in chunk or chunk[:50] in meta.text_preview:
+                    matched_metadata.append(meta)
+                    break
+        
         return RAGQueryResponse(
             answer=answer.strip(),
             matched_chunks=matched_chunks,
             question=request.question,
-            metadata=matched_metadata
+            metadata=matched_metadata[:3]  # Limit to 3 metadata items
         )
         
     except HTTPException:
@@ -585,94 +473,41 @@ async def query_rag(request: RAGQueryRequest):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    global vector_db, stored_chunks, embedding_model, document_metadata
-    
-    vector_db_status = {
-        "initialized": vector_db is not None,
-        "size": vector_db.ntotal if vector_db else 0,
-        "dimension": vector_db.d if vector_db else 0
-    }
-    
-    embedding_status = {
-        "model_loaded": embedding_model is not None,
-        "model_name": "all-MiniLM-L6-v2" if embedding_model else None
-    }
-    
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "gemini_status": "connected",
-        "vector_database": vector_db_status,
-        "embedding_model": embedding_status,
+        "gemini_status": "connected" if GEMINI_AVAILABLE else "disconnected",
+        "vector_database": {
+            "initialized": len(stored_chunks) > 0,
+            "size": len(stored_chunks),
+            "dimension": 384  # Mock dimension
+        },
+        "embedding_model": {
+            "model_loaded": False,  # Simplified version
+            "model_name": "simplified_text_similarity"
+        },
         "stored_chunks": len(stored_chunks),
         "documents_loaded": len(document_metadata),
-        "rag_status": "ready" if stored_chunks and vector_db else "no_document"
+        "rag_status": "ready" if stored_chunks else "no_document"
     }
-
-@app.post("/vector/search", response_model=VectorSearchResponse)
-async def vector_search(request: VectorSearchRequest):
-    """Search vector database directly"""
-    if not request.query.strip():
-        raise HTTPException(status_code=400, detail="Query cannot be empty")
-    
-    if not stored_chunks or vector_db is None:
-        raise HTTPException(status_code=400, detail="No documents have been uploaded yet")
-    
-    try:
-        # Search vector database
-        search_results = search_vector_database(request.query, top_k=request.top_k)
-        
-        if not search_results:
-            return VectorSearchResponse(
-                query=request.query,
-                matches=[],
-                answer="No relevant information found in the documents."
-            )
-        
-        # Generate answer using top results
-        context = "\n\n---\n\n".join([result['chunk_text'] for result in search_results[:3]])
-        
-        prompt = f"""
-        Based on the following context, provide a comprehensive answer to the question.
-        
-        Context:
-        {context}
-        
-        Question: {request.query}
-        
-        Answer:
-        """
-        
-        answer = await generate_with_gemini(prompt)
-        
-        return VectorSearchResponse(
-            query=request.query,
-            matches=search_results,
-            answer=answer.strip()
-        )
-        
-    except Exception as e:
-        print(f"Error in vector search: {e}")
-        raise HTTPException(status_code=500, detail="Vector search failed")
 
 @app.get("/documents")
 async def list_documents():
     """List all uploaded documents"""
     return {
-        "documents": document_metadata,
+        "documents": [doc.dict() for doc in document_metadata],
         "total_chunks": len(stored_chunks),
-        "vector_db_size": vector_db.ntotal if vector_db else 0
+        "vector_db_size": len(stored_chunks)
     }
 
 @app.delete("/documents")
 async def clear_documents():
     """Clear all uploaded documents"""
-    global stored_chunks, vector_db, chunk_metadata, document_metadata
+    global stored_chunks, document_metadata, chunk_metadata
     
     stored_chunks = []
-    vector_db = None
-    chunk_metadata = []
     document_metadata = []
+    chunk_metadata = []
     
     return {
         "message": "All documents cleared successfully",
@@ -683,9 +518,9 @@ async def clear_documents():
 async def root():
     """Root endpoint"""
     return {
-        "message": "AI Research Assistant API",
-        "version": "1.0.0",
-        "model": "Google Gemini Pro",
+        "message": "AI Research Assistant API - Simplified Version",
+        "version": "1.0.0-simplified",
+        "model": "Google Gemini Pro" if GEMINI_AVAILABLE else "Mock Responses",
         "status": "running"
     }
 
@@ -696,13 +531,14 @@ if __name__ == "__main__":
     port = int(os.getenv("API_PORT", "8000"))
     debug = os.getenv("DEBUG", "false").lower() == "true"
     
-    print(f"🚀 Starting AI Research Assistant API")
+    print(f"🚀 Starting AI Research Assistant API - Simplified Version")
     print(f"📍 Server: http://{host}:{port}")
-    print(f"🤖 AI Model: Google Gemini Pro")
+    print(f"🤖 AI Model: {'Google Gemini Pro' if GEMINI_AVAILABLE else 'Mock Responses'}")
     print(f"📚 API Docs: http://{host}:{port}/docs")
+    print(f"⚠️ Note: This is a simplified version without advanced vector database")
     
     uvicorn.run(
-        "main:app",
+        "main_simple:app",
         host=host,
         port=port,
         reload=debug
