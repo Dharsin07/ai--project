@@ -1,0 +1,32 @@
+{
+  "name": "new-ai----assistant",
+  "version": "1.0.0",
+  "description": "",
+  "main": "script.js",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:basic": "npx playwright test tests/basic.spec.js",
+    "test:rag": "npx playwright test tests/rag-flow.spec.js",
+    "test:full": "npx playwright test",
+    "automate": "npm run test:full",
+    "prepare": "husky install"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dharsin07/ai--project.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Dharsin07/ai--project/issues"
+  },
+  "homepage": "https://github.com/Dharsin07/ai--project#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "husky": "^9.1.7"
+  },
+  "dependencies": {
+    "axios": "^1.13.3"
+  }
+}

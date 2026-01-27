@@ -1,0 +1,229 @@
+{
+  "config": {
+    "configFile": "C:\\Users\\smart\\Desktop\\new ai ---assistant\\playwright.config.js",
+    "rootDir": "C:/Users/smart/Desktop/new ai ---assistant/tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "C:/Users/smart/Desktop/new ai ---assistant/test-results",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "C:/Users/smart/Desktop/new ai ---assistant/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "html",
+        {
+          "outputFolder": "playwright-report"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results.json"
+        }
+      ],
+      [
+        "junit",
+        {
+          "outputFile": "test-results.xml"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.0",
+    "workers": 1,
+    "webServer": {
+      "command": "python gemini_server.py",
+      "url": "http://localhost:8000",
+      "reuseExistingServer": true,
+      "timeout": 120000
+    }
+  },
+  "suites": [
+    {
+      "title": "rag-flow.spec.js",
+      "file": "rag-flow.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "RAG PDF Upload & Q&A Workflow",
+          "file": "rag-flow.spec.js",
+          "line": 4,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should complete RAG flow: upload PDF, ask question, get answer with sources",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 9571,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "Uploading PDF...\n"
+                        },
+                        {
+                          "text": "Entering question...\n"
+                        },
+                        {
+                          "text": "Submitting question...\n"
+                        },
+                        {
+                          "text": "Verifying AI answer...\n"
+                        },
+                        {
+                          "text": "AI Answer rendered successfully\n"
+                        },
+                        {
+                          "text": "Verifying source highlights...\n"
+                        },
+                        {
+                          "text": "Source highlights visible successfully\n"
+                        },
+                        {
+                          "text": "✅ RAG flow test completed successfully\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-27T16:19:45.729Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "a7a4eb9b1c6aefec28cb-440470098675dc56694f",
+              "file": "rag-flow.spec.js",
+              "line": 5,
+              "column": 7
+            },
+            {
+              "title": "should handle PDF upload gracefully",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4459,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-27T16:19:55.755Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "a7a4eb9b1c6aefec28cb-ea1bf0e1c9ec381d30d3",
+              "file": "rag-flow.spec.js",
+              "line": 70,
+              "column": 7
+            },
+            {
+              "title": "should handle empty question submission",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 9026,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-27T16:20:00.251Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "a7a4eb9b1c6aefec28cb-8a25ed1c739c8625f754",
+              "file": "rag-flow.spec.js",
+              "line": 88,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-01-27T16:19:42.025Z",
+    "duration": 28494.128,
+    "expected": 3,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}
