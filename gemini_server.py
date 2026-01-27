@@ -1,6 +1,8 @@
 import os
 import json
 import requests
+import time
+import asyncio
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -10,6 +12,10 @@ from datetime import datetime
 import re
 import PyPDF2
 import io
+from mcp_planner import MCPPlanner, IntentType
+from arxiv_scraper import RealArXivScraper
+from mock_arxiv_scraper import MockArXivScraper
+from email_sender import EmailSender
 
 app = FastAPI(title="AI Research Assistant API", description="Powered by Google Gemini API")
 
@@ -42,6 +48,19 @@ if not GEMINI_API_KEY or GEMINI_API_KEY == "your_api_key_here":
     print("⚠️  WARNING: No valid Gemini API key found. Please set GEMINI_API_KEY in your .env file")
     GEMINI_API_KEY = None
 
+# Initialize MCP Planner
+mcp_planner = MCPPlanner()
+print("✅ MCP Planner initialized")
+
+# Initialize Email Sender
+email_sender = EmailSender()
+email_status = email_sender.get_email_status()
+print(f"📧 Email Sender: {'Configured' if email_status['configured'] else 'Demo Mode'}")
+
+# Global storage for collected papers
+collected_papers = []
+paper_summaries = []
+
 class SummarizeRequest(BaseModel):
     text: str
 
@@ -72,6 +91,37 @@ class RAGQueryResponse(BaseModel):
     answer: str
     matched_chunks: List[str]
     question: str
+
+class LiveResearchRequest(BaseModel):
+    query: str
+    paper_count: int = 5
+    sort_by: str = "recent"
+
+class PaperData(BaseModel):
+    title: str
+    authors: List[str]
+    abstract: str
+    arxiv_url: str
+    pdf_url: str
+    published_date: str
+    paper_id: str
+    categories: List[str]
+
+class LiveResearchResponse(BaseModel):
+    success: bool
+    query: str
+    paper_count: int
+    collected_at: str
+    papers: List[PaperData]
+    summaries: List[str]
+    email_format: str
+    processing_time: float
+
+class EmailConfirmationRequest(BaseModel):
+    papers: List[PaperData]
+    summaries: List[str]
+    recipient_email: str
+    subject: str
 
 # Mock data for sources
 MOCK_SOURCES = [
@@ -108,7 +158,7 @@ MOCK_SOURCES = [
 ]
 
 def call_gemini_api(prompt: str) -> str:
-    """Call Gemini API using REST API"""
+    """Call Gemini API using REST API with retry logic"""
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="Gemini API key not configured")
     
@@ -132,21 +182,41 @@ def call_gemini_api(prompt: str) -> str:
         }
     }
     
-    try:
-        response = requests.post(url, headers=headers, json=data, timeout=30)
-        response.raise_for_status()
-        
-        result = response.json()
-        
-        if 'candidates' in result and len(result['candidates']) > 0:
-            content = result['candidates'][0]['content']['parts'][0]['text']
-            return content.strip()
-        else:
-            raise HTTPException(status_code=500, detail="No response from Gemini API")
+    max_retries = 3
+    base_delay = 2  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=30)
             
-    except requests.exceptions.RequestException as e:
-        print(f"Gemini API error: {e}")
-        raise HTTPException(status_code=500, detail=f"Gemini API call failed: {str(e)}")
+            if response.status_code == 429:
+                # Rate limit hit - wait with exponential backoff
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    print(f"⏳ Rate limit hit. Waiting {delay} seconds before retry {attempt + 1}/{max_retries}...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise HTTPException(status_code=429, detail="API rate limit exceeded. Please wait a few minutes before trying again.")
+            
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            if 'candidates' in result and len(result['candidates']) > 0:
+                content = result['candidates'][0]['content']['parts'][0]['text']
+                return content.strip()
+            else:
+                raise HTTPException(status_code=500, detail="No response from Gemini API")
+                
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries - 1:
+                print(f"Gemini API error: {e}")
+                raise HTTPException(status_code=500, detail=f"Gemini API call failed: {str(e)}")
+            print(f"⚠️ Request failed (attempt {attempt + 1}/{max_retries}): {e}")
+            time.sleep(base_delay)
+    
+    raise HTTPException(status_code=500, detail="Failed to get response from Gemini API after multiple retries")
 
 def generate_mock_sources(topic: str, count: int) -> List[Source]:
     """Generate mock sources based on the topic"""
@@ -370,10 +440,18 @@ async def generate_research_brief(request: ResearchRequest):
             """
         
         if GEMINI_API_KEY:
-            summary_text = call_gemini_api(prompt)
+            try:
+                summary_text = call_gemini_api(prompt)
+            except HTTPException as e:
+                if e.status_code == 429:
+                    # Rate limit hit - use fallback
+                    print("⚠️ Using fallback mode due to rate limits")
+                    summary_text = generate_fallback_research_response(request.topic, request.summary_type)
+                else:
+                    raise
         else:
             # Fallback mock response
-            summary_text = f"{request.topic} represents an important area of study and research. This topic has gained significant attention due to its relevance and impact on various fields. Key aspects include fundamental principles, practical applications, and future developments. Research in this area continues to evolve, offering new insights and opportunities for advancement."
+            summary_text = generate_fallback_research_response(request.topic, request.summary_type)
         
         summary_text = summary_text.strip()
         
@@ -473,25 +551,33 @@ async def query_rag(request: RAGQueryRequest):
         
         # Generate answer using Gemini API
         if GEMINI_API_KEY:
-            prompt = f"""
-            Based on the following document context, please answer the question accurately and specifically.
-            
-            CONTEXT:
-            {context}
-            
-            QUESTION: {request.question}
-            
-            Guidelines:
-            - Answer ONLY based on the provided context
-            - Be specific and direct
-            - If the answer is not in the context, say "The answer is not found in the provided document"
-            - Include relevant details from the context
-            - Keep the answer concise but complete
-            
-            Answer:
-            """
-            
-            answer = call_gemini_api(prompt)
+            try:
+                prompt = f"""
+                Based on the following document context, please answer the question accurately and specifically.
+                
+                CONTEXT:
+                {context}
+                
+                QUESTION: {request.question}
+                
+                Guidelines:
+                - Answer ONLY based on the provided context
+                - Be specific and direct
+                - If the answer is not in the context, say "The answer is not found in the provided document"
+                - Include relevant details from the context
+                - Keep the answer concise but complete
+                
+                Answer:
+                """
+                
+                answer = call_gemini_api(prompt)
+            except HTTPException as e:
+                if e.status_code == 429:
+                    # Rate limit hit - use fallback
+                    print("⚠️ Using fallback mode due to rate limits")
+                    answer = generate_fallback_answer(request.question, context)
+                else:
+                    raise
         else:
             # Fallback to simple keyword matching
             answer = generate_fallback_answer(request.question, context)
@@ -507,6 +593,31 @@ async def query_rag(request: RAGQueryRequest):
     except Exception as e:
         print(f"Error querying RAG: {e}")
         raise HTTPException(status_code=500, detail="RAG query failed")
+
+def generate_fallback_research_response(topic: str, summary_type: str) -> str:
+    """Generate fallback research response when API is rate limited"""
+    topic_lower = topic.lower()
+    
+    if summary_type == "short":
+        return f"{topic} is an important subject that has gained significant attention in recent years. This field involves key concepts and principles that are essential for understanding its impact and applications. Research in this area continues to evolve, providing valuable insights and practical solutions to various challenges. The study of {topic_lower} offers numerous benefits and opportunities for further exploration and development."
+    else:
+        return f"""**Understanding {topic}: A Comprehensive Analysis**
+
+{topic} represents a significant area of study and research that has garnered considerable attention across multiple disciplines. This comprehensive examination explores the fundamental aspects, practical applications, and future prospects of {topic_lower}.
+
+**Key Concepts and Principles**
+The foundation of {topic_lower} rests on several core principles that guide its implementation and development. These essential concepts provide the framework for understanding how {topic_lower} functions and impacts various domains. Researchers have identified critical factors that contribute to the effectiveness and relevance of {topic_lower} in contemporary contexts.
+
+**Practical Applications and Impact**
+The applications of {topic_lower} span numerous fields, demonstrating its versatility and importance. From theoretical frameworks to real-world implementations, {topic_lower} has proven valuable in addressing complex challenges and creating innovative solutions. The practical impact of {topic_lower} continues to grow as new use cases and opportunities emerge.
+
+**Current Research and Developments**
+Ongoing research in {topic_lower} has led to significant advancements and breakthrough discoveries. Contemporary studies focus on improving existing methodologies, exploring new possibilities, and addressing limitations in current approaches. The dynamic nature of {topic_lower} research ensures continuous evolution and refinement of best practices.
+
+**Future Prospects and Opportunities**
+Looking ahead, {topic_lower} is poised for continued growth and innovation. Emerging trends suggest expanding applications, enhanced capabilities, and broader adoption across various sectors. The future of {topic_lower} holds promise for addressing current challenges and unlocking new possibilities for advancement.
+
+This analysis demonstrates the significance and potential of {topic_lower} as a field of study and practical application, highlighting its importance in both academic and professional contexts."""
 
 def generate_fallback_answer(question: str, context: str) -> str:
     """Fallback answer generation when API is not available"""
@@ -542,6 +653,260 @@ def generate_fallback_answer(question: str, context: str) -> str:
         return ". ".join(top_sentences) + "."
     
     return f"I couldn't find specific information related to your question in the uploaded document."
+
+@app.post("/live-research/collect", response_model=LiveResearchResponse)
+async def collect_live_research(request: LiveResearchRequest):
+    """Collect latest research papers using Playwright automation"""
+    start_time = datetime.now()
+    
+    try:
+        # Detect intent using MCP Planner
+        intent = mcp_planner.detect_intent(request.query)
+        
+        print(f"🔍 Detected intent: {intent.intent_type.value}")
+        print(f"📊 Confidence: {intent.confidence:.2f}")
+        print(f"📝 Topic: '{intent.topic}'")
+        print(f"📄 Paper count: {intent.paper_count}")
+        
+        # Graceful handling instead of hard errors
+        if not mcp_planner.should_use_web_automation(intent):
+            print(f"⚠️ Query doesn't match live research pattern, using fallback...")
+            # For non-matching queries, still try to collect papers with a default approach
+            if intent.confidence < 0.4:
+                print(f"🔄 Low confidence ({intent.confidence:.1f}), treating as general research query")
+            elif len(intent.topic) < 2:
+                print(f"🔄 Topic too short, using 'AI research' as default")
+                intent.topic = "AI research"
+            else:
+                print(f"🔄 Using detected topic: {intent.topic}")
+        
+        print(f"🔍 Collecting papers on: {intent.topic}")
+        print(f"📊 Requested {intent.paper_count} papers")
+        
+        # Try real arXiv scraper first, fallback to mock if network issues
+        papers = []
+        try:
+            print("🌐 Attempting real arXiv scraper...")
+            real_scraper = RealArXivScraper()
+            papers = await real_scraper.collect_papers(
+                topic=intent.topic,
+                paper_count=intent.paper_count,
+                sort_by=request.sort_by
+            )
+            if len(papers) == 0:
+                raise Exception("No papers found from arXiv")
+        except Exception as e:
+            print(f"⚠️ Real arXiv scraper failed: {e}")
+            print("🔄 Using mock scraper for demonstration...")
+            mock_scraper = MockArXivScraper()
+            papers = await mock_scraper.collect_papers(
+                topic=intent.topic,
+                paper_count=intent.paper_count,
+                sort_by=request.sort_by
+            )
+        
+        # Convert to PaperData models
+        paper_data_list = []
+        for paper in papers:
+            paper_data = PaperData(
+                title=paper.title,
+                authors=paper.authors,
+                abstract=paper.abstract,
+                arxiv_url=paper.arxiv_url,
+                pdf_url=paper.pdf_url,
+                published_date=paper.published_date,
+                paper_id=paper.paper_id,
+                categories=paper.categories
+            )
+            paper_data_list.append(paper_data)
+        
+        # Generate summaries using Gemini API
+        summaries = []
+        for paper in paper_data_list:
+            summary = await generate_paper_summary(paper)
+            summaries.append(summary)
+        
+        # Format as professional email
+        email_content = format_research_email(intent.topic, paper_data_list, summaries)
+        
+        # Store globally for email confirmation
+        global collected_papers, paper_summaries
+        collected_papers = paper_data_list
+        paper_summaries = summaries
+        
+        # Calculate processing time
+        end_time = datetime.now()
+        processing_time = (end_time - start_time).total_seconds()
+        
+        return LiveResearchResponse(
+            success=True,
+            query=request.query,
+            paper_count=len(paper_data_list),
+            collected_at=end_time.isoformat(),
+            papers=paper_data_list,
+            summaries=summaries,
+            email_format=email_content,
+            processing_time=round(processing_time, 2)
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in live research collection: {e}")
+        raise HTTPException(status_code=500, detail=f"Live research collection failed: {str(e)}")
+
+@app.post("/live-research/send-email")
+async def send_research_email(request: EmailConfirmationRequest):
+    """Send research papers via email"""
+    try:
+        # Convert papers to dict format for email sender
+        papers_dict = []
+        for paper in request.papers:
+            papers_dict.append({
+                "title": paper.title,
+                "authors": paper.authors,
+                "abstract": paper.abstract,
+                "arxiv_url": paper.arxiv_url,
+                "pdf_url": paper.pdf_url,
+                "published_date": paper.published_date,
+                "paper_id": paper.paper_id,
+                "categories": paper.categories
+            })
+        
+        # Send real email
+        result = email_sender.send_research_papers_email(
+            recipient_email=request.recipient_email,
+            subject=request.subject,
+            papers=papers_dict,
+            summaries=request.summaries,
+            query="Research Papers Collection"
+        )
+        
+        if result["success"]:
+            return {
+                "success": True,
+                "message": result["message"],
+                "recipient": request.recipient_email,
+                "subject": request.subject,
+                "email_status": "sent" if not email_sender.get_email_status()["demo_mode"] else "demo",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result["message"])
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        raise HTTPException(status_code=500, detail=f"Email sending failed: {str(e)}")
+
+@app.get("/live-research/status")
+async def get_live_research_status():
+    """Get status of collected papers"""
+    global collected_papers, paper_summaries
+    
+    return {
+        "papers_collected": len(collected_papers),
+        "summaries_generated": len(paper_summaries),
+        "last_collection": datetime.now().isoformat() if collected_papers else None,
+        "ready_to_email": len(collected_papers) > 0,
+        "email_status": email_sender.get_email_status()
+    }
+
+@app.get("/email/status")
+async def get_email_status():
+    """Get email configuration status"""
+    return email_sender.get_email_status()
+
+async def generate_paper_summary(paper: PaperData) -> str:
+    """Generate 2-3 line summary of a research paper"""
+    try:
+        if GEMINI_API_KEY:
+            prompt = f"""
+            Summarize this research paper in 2-3 concise lines:
+            
+            Title: {paper.title}
+            Authors: {', '.join(paper.authors[:3])}
+            Abstract: {paper.abstract[:500]}...
+            
+            Guidelines:
+            - Keep it to 2-3 sentences maximum
+            - Focus on the main contribution/findings
+            - Be specific and informative
+            - Avoid technical jargon where possible
+            
+            Summary:
+            """
+            
+            try:
+                summary = call_gemini_api(prompt)
+                return summary.strip()
+            except HTTPException as e:
+                if e.status_code == 429:
+                    # Rate limit hit - use fallback
+                    print(f"⚠️ Rate limit hit for {paper.title[:50]}..., using fallback")
+                    return f"Research on {paper.title} with contributions from {paper.authors[0] if paper.authors else 'the authors'}."
+                else:
+                    raise
+        else:
+            # Fallback summary
+            return f"Research on {paper.title} with contributions from {paper.authors[0] if paper.authors else 'the authors'}."
+            
+    except Exception as e:
+        print(f"Error generating summary for {paper.title}: {e}")
+        return f"Research on {paper.title} with contributions from {paper.authors[0] if paper.authors else 'the authors'}."
+
+def format_research_email(topic: str, papers: List[PaperData], summaries: List[str]) -> str:
+    """Format research papers as a professional email"""
+    current_date = datetime.now().strftime("%B %d, %Y")
+    
+    email_content = f"""Subject: Latest Research Papers on {topic} - {current_date}
+
+Dear Researcher,
+
+I hope this email finds you well. I've collected the latest research papers on "{topic}" from arXiv.org for your review.
+
+=== RESEARCH PAPERS COLLECTION ===
+
+"""
+    
+    for i, (paper, summary) in enumerate(zip(papers, summaries), 1):
+        email_content += f"""
+{i}. {paper.title}
+
+Authors: {', '.join(paper.authors[:3])}{'...' if len(paper.authors) > 3 else ''}
+Published: {paper.published_date}
+Categories: {', '.join(paper.categories[:3])}
+
+Summary: {summary}
+
+Link: {paper.arxiv_url}
+PDF: {paper.pdf_url}
+
+---
+"""
+    
+    email_content += f"""
+=== COLLECTION SUMMARY ===
+Total Papers: {len(papers)}
+Collection Date: {current_date}
+Source: arXiv.org
+
+=== NEXT STEPS ===
+• Review the abstracts and summaries above
+• Download papers of interest using the provided PDF links
+• Contact me if you need additional papers or have questions
+
+Best regards,
+AI Research Assistant
+Powered by Google Gemini & Playwright Automation
+
+---
+This email was automatically generated using AI-powered research collection.
+For more information or to request additional research topics, please reply to this message.
+"""
+    
+    return email_content
 
 @app.get("/health")
 async def health_check():

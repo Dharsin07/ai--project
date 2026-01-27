@@ -140,6 +140,106 @@
             </div>
         </section>
 
+        <!-- Live Research Paper Collector Section -->
+        <section class="hero-section">
+            <div class="container">
+                <div class="input-card">
+                    <h2 class="card-title">🔬 Live Research Paper Collector</h2>
+                    <p class="card-description">Collect latest research papers from arXiv using AI-powered web automation</p>
+                    
+                    <form id="liveResearchForm" class="live-research-form">
+                        <div class="form-group">
+                            <label for="liveResearchQuery" class="form-label">Research Query</label>
+                            <textarea 
+                                id="liveResearchQuery" 
+                                name="liveResearchQuery"
+                                class="form-textarea"
+                                placeholder="e.g., Collect latest 5 AI security research papers"
+                                rows="3"
+                                required
+                            ></textarea>
+                        </div>
+
+                        <div class="form-controls">
+                            <div class="form-group">
+                                <label for="paperCount" class="form-label">Number of Papers: <span id="paperCountValue">5</span></label>
+                                <input 
+                                    type="range" 
+                                    id="paperCount" 
+                                    name="paperCount"
+                                    class="form-slider"
+                                    min="1" 
+                                    max="10" 
+                                    value="5"
+                                >
+                            </div>
+
+                            <div class="form-group">
+                                <label for="sortBy" class="form-label">Sort By</label>
+                                <select id="sortBy" name="sortBy" class="form-select">
+                                    <option value="recent">Most Recent</option>
+                                    <option value="relevance">Relevance</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary" id="liveResearchBtn">
+                            <span class="btn-text">🚀 Collect Papers</span>
+                            <span class="btn-loader" style="display: none;">
+                                <span class="spinner"></span>
+                            </span>
+                        </button>
+                    </form>
+
+                    <div id="liveResearchStatus" class="upload-status" style="display: none;"></div>
+                </div>
+
+                <!-- Email Confirmation Section -->
+                <div class="input-card" id="emailConfirmationCard" style="display: none;">
+                    <h2 class="card-title">📧 Email Confirmation</h2>
+                    <p class="card-description">Review collected papers and send via email</p>
+                    
+                    <form id="emailConfirmationForm" class="email-confirmation-form">
+                        <div class="form-group">
+                            <label for="recipientEmail" class="form-label">Recipient Email</label>
+                            <input 
+                                type="email" 
+                                id="recipientEmail" 
+                                name="recipientEmail"
+                                class="form-input"
+                                placeholder="researcher@example.com"
+                                required
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label for="emailSubject" class="form-label">Email Subject</label>
+                            <input 
+                                type="text" 
+                                id="emailSubject" 
+                                name="emailSubject"
+                                class="form-input"
+                                placeholder="Latest Research Papers"
+                                required
+                            >
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary" id="sendEmailBtn">
+                                <span class="btn-text">📧 Send Email</span>
+                                <span class="btn-loader" style="display: none;">
+                                    <span class="spinner"></span>
+                                </span>
+                            </button>
+                            <button type="button" class="btn-secondary" id="cancelEmailBtn">
+                                <span class="btn-text">❌ Cancel</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
         <!-- RAG Query Section -->
         <section class="hero-section">
             <div class="container">

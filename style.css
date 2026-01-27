@@ -865,3 +865,202 @@ body {
 .rag-query-form {
   max-width: 100%;
 }
+
+/* Research Papers Display Styles */
+.papers-container {
+  display: grid;
+  gap: var(--spacing-6);
+  margin-top: var(--spacing-6);
+}
+
+.paper-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: var(--spacing-6);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
+}
+
+.paper-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.paper-header {
+  margin-bottom: var(--spacing-4);
+  padding-bottom: var(--spacing-4);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.paper-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-2);
+  line-height: 1.4;
+}
+
+.paper-meta {
+  display: flex;
+  gap: var(--spacing-4);
+  flex-wrap: wrap;
+}
+
+.paper-date,
+.paper-categories {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  background: var(--surface);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: 6px;
+}
+
+.paper-content {
+  display: grid;
+  gap: var(--spacing-4);
+}
+
+.paper-authors,
+.paper-abstract,
+.paper-summary {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.paper-authors strong,
+.paper-abstract strong,
+.paper-summary strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.paper-abstract {
+  color: var(--text-secondary);
+}
+
+.paper-summary {
+  background: var(--primary-light);
+  padding: var(--spacing-3);
+  border-radius: 8px;
+  border-left: 4px solid var(--primary-color);
+}
+
+.paper-links {
+  display: flex;
+  gap: var(--spacing-3);
+  margin-top: var(--spacing-4);
+  padding-top: var(--spacing-4);
+  border-top: 1px solid var(--border-light);
+}
+
+.paper-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-2) var(--spacing-3);
+  background: var(--primary-color);
+  color: var(--text-inverse);
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.paper-link:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.results-info {
+  display: flex;
+  gap: var(--spacing-4);
+  align-items: center;
+  margin-left: auto;
+}
+
+.paper-count,
+.processing-time {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  background: var(--surface);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: 6px;
+}
+
+/* Form Controls for Live Research */
+.form-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-4);
+  margin: var(--spacing-4) 0;
+}
+
+.form-slider {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  outline: none;
+  transition: background 0.3s;
+}
+
+.form-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.form-slider::-webkit-slider-thumb:hover {
+  background: var(--primary-hover);
+}
+
+.form-select {
+  width: 100%;
+  padding: var(--spacing-3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  transition: border-color 0.3s;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+/* Email Confirmation Styles */
+.form-actions {
+  display: flex;
+  gap: var(--spacing-3);
+  margin-top: var(--spacing-4);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .form-controls {
+    grid-template-columns: 1fr;
+  }
+  
+  .paper-meta {
+    flex-direction: column;
+    gap: var(--spacing-2);
+  }
+  
+  .paper-links {
+    flex-direction: column;
+  }
+  
+  .results-info {
+    flex-direction: column;
+    gap: var(--spacing-2);
+  }
+}

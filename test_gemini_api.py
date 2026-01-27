@@ -21,7 +21,7 @@ def test_gemini_api():
         print("❌ No API key found")
         return False
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     headers = {
         'Content-Type': 'application/json',

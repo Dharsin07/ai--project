@@ -47,6 +47,31 @@ class ResearchAssistant {
     this.themeToggle = document.getElementById('themeToggle');
     this.themeIcon = this.themeToggle.querySelector('.theme-icon');
     
+    // Live Research elements
+    this.liveResearchForm = document.getElementById('liveResearchForm');
+    this.liveResearchQuery = document.getElementById('liveResearchQuery');
+    this.paperCount = document.getElementById('paperCount');
+    this.paperCountValue = document.getElementById('paperCountValue');
+    this.sortBy = document.getElementById('sortBy');
+    this.liveResearchBtn = document.getElementById('liveResearchBtn');
+    this.liveResearchBtnText = this.liveResearchBtn.querySelector('.btn-text');
+    this.liveResearchBtnLoader = this.liveResearchBtn.querySelector('.btn-loader');
+    this.liveResearchStatus = document.getElementById('liveResearchStatus');
+    
+    // Email confirmation elements
+    this.emailConfirmationCard = document.getElementById('emailConfirmationCard');
+    this.emailConfirmationForm = document.getElementById('emailConfirmationForm');
+    this.recipientEmail = document.getElementById('recipientEmail');
+    this.emailSubject = document.getElementById('emailSubject');
+    this.sendEmailBtn = document.getElementById('sendEmailBtn');
+    this.sendEmailBtnText = this.sendEmailBtn.querySelector('.btn-text');
+    this.sendEmailBtnLoader = this.sendEmailBtn.querySelector('.btn-loader');
+    this.cancelEmailBtn = document.getElementById('cancelEmailBtn');
+    
+    // Store collected papers globally
+    this.collectedPapers = [];
+    this.paperSummaries = [];
+    
     // Initialize RAG question as disabled until PDF is uploaded
     this.ragQuestion.disabled = true;
     this.ragQueryBtn.disabled = true;
@@ -71,6 +96,28 @@ class ResearchAssistant {
     this.ragQueryForm.addEventListener('submit', (e) => {
       e.preventDefault();
       this.handleRAGQuery();
+    });
+
+    // Live Research form
+    this.liveResearchForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.handleLiveResearch();
+    });
+
+    // Email confirmation form
+    this.emailConfirmationForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.handleEmailConfirmation();
+    });
+
+    // Cancel email button
+    this.cancelEmailBtn.addEventListener('click', () => {
+      this.hideEmailConfirmation();
+    });
+
+    // Paper count slider
+    this.paperCount.addEventListener('input', (e) => {
+      this.paperCountValue.textContent = e.target.value;
     });
 
     // Source count slider
@@ -684,6 +731,348 @@ class ResearchAssistant {
     setTimeout(() => {
       this.resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
+  }
+
+  // Handle Live Research Paper Collection
+  async handleLiveResearch() {
+    const query = this.liveResearchQuery.value.trim();
+    const paperCount = parseInt(this.paperCount.value);
+    const sortBy = this.sortBy.value;
+
+    if (!query) {
+      this.showError('Please enter a research query');
+      return;
+    }
+
+    if (query.length < 10) {
+      this.showError('Research query must be at least 10 characters long');
+      return;
+    }
+
+    this.setLiveResearchLoadingState(true);
+
+    try {
+      console.log('🔍 Starting live research collection:', { query, paperCount, sortBy });
+
+      const response = await fetch('http://localhost:8000/live-research/collect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: query,
+          paper_count: paperCount,
+          sort_by: sortBy
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Live research collection failed');
+      }
+
+      const data = await response.json();
+      
+      console.log('✅ Live research collection successful:', data);
+      
+      // Store papers globally
+      this.collectedPapers = data.papers;
+      this.paperSummaries = data.summaries;
+
+      // Display success message
+      this.showLiveResearchStatus(data);
+      
+      // Display the collected papers
+      this.displayResearchPapers(data);
+      
+      // Show email confirmation
+      this.showEmailConfirmation();
+
+    } catch (error) {
+      console.error('❌ Live research collection error:', error);
+      this.showLiveResearchError(error.message);
+    } finally {
+      this.setLiveResearchLoadingState(false);
+    }
+  }
+
+  // Handle Email Confirmation
+  async handleEmailConfirmation() {
+    const recipientEmail = this.recipientEmail.value.trim();
+    const subject = this.emailSubject.value.trim();
+
+    if (!recipientEmail) {
+      this.showError('Please enter recipient email');
+      return;
+    }
+
+    if (!subject) {
+      this.showError('Please enter email subject');
+      return;
+    }
+
+    this.setEmailLoadingState(true);
+
+    try {
+      console.log('📧 Sending research email:', { recipientEmail, subject });
+
+      const response = await fetch('http://localhost:8000/live-research/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          papers: this.collectedPapers,
+          summaries: this.paperSummaries,
+          recipient_email: recipientEmail,
+          subject: subject
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Email sending failed');
+      }
+
+      const data = await response.json();
+      
+      console.log('✅ Email sent successfully:', data);
+      
+      this.showSuccess(`Research papers sent to ${recipientEmail}!`);
+      this.hideEmailConfirmation();
+      this.clearLiveResearchForm();
+
+    } catch (error) {
+      console.error('❌ Email sending error:', error);
+      this.showError('Email sending failed: ' + error.message);
+    } finally {
+      this.setEmailLoadingState(false);
+    }
+  }
+
+  // Set Live Research loading state
+  setLiveResearchLoadingState(isLoading) {
+    if (isLoading) {
+      this.liveResearchBtn.disabled = true;
+      this.liveResearchBtnText.style.display = 'none';
+      this.liveResearchBtnLoader.style.display = 'flex';
+      this.liveResearchQuery.disabled = true;
+      this.paperCount.disabled = true;
+      this.sortBy.disabled = true;
+    } else {
+      this.liveResearchBtn.disabled = false;
+      this.liveResearchBtnText.style.display = 'inline';
+      this.liveResearchBtnLoader.style.display = 'none';
+      this.liveResearchQuery.disabled = false;
+      this.paperCount.disabled = false;
+      this.sortBy.disabled = false;
+    }
+  }
+
+  // Set Email loading state
+  setEmailLoadingState(isLoading) {
+    if (isLoading) {
+      this.sendEmailBtn.disabled = true;
+      this.sendEmailBtnText.style.display = 'none';
+      this.sendEmailBtnLoader.style.display = 'flex';
+      this.recipientEmail.disabled = true;
+      this.emailSubject.disabled = true;
+      this.cancelEmailBtn.disabled = true;
+    } else {
+      this.sendEmailBtn.disabled = false;
+      this.sendEmailBtnText.style.display = 'inline';
+      this.sendEmailBtnLoader.style.display = 'none';
+      this.recipientEmail.disabled = false;
+      this.emailSubject.disabled = false;
+      this.cancelEmailBtn.disabled = false;
+    }
+  }
+
+  // Show Live Research status
+  showLiveResearchStatus(data) {
+    this.liveResearchStatus.style.display = 'block';
+    this.liveResearchStatus.className = 'upload-status success';
+    this.liveResearchStatus.innerHTML = `
+      <strong>✅ Collection Successful!</strong><br>
+      Query: ${data.query}<br>
+      Papers collected: ${data.paper_count}<br>
+      Processing time: ${data.processing_time}s
+    `;
+  }
+
+  // Show Live Research error
+  showLiveResearchError(message) {
+    this.liveResearchStatus.style.display = 'block';
+    this.liveResearchStatus.className = 'upload-status error';
+    this.liveResearchStatus.innerHTML = `<strong>❌ Collection Failed:</strong> ${message}`;
+  }
+
+  // Show Email Confirmation
+  showEmailConfirmation() {
+    this.emailConfirmationCard.style.display = 'block';
+    this.emailConfirmationCard.classList.add('fade-in');
+    
+    // Auto-fill subject if empty
+    if (!this.emailSubject.value.trim()) {
+      const topic = this.collectedPapers[0]?.categories[0] || 'Research Papers';
+      this.emailSubject.value = `Latest ${topic} Research Papers - ${new Date().toLocaleDateString()}`;
+    }
+    
+    // Scroll to email confirmation
+    setTimeout(() => {
+      this.emailConfirmationCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  }
+
+  // Hide Email Confirmation
+  hideEmailConfirmation() {
+    this.emailConfirmationCard.classList.add('fade-out');
+    setTimeout(() => {
+      this.emailConfirmationCard.style.display = 'none';
+      this.emailConfirmationCard.classList.remove('fade-in', 'fade-out');
+      this.emailConfirmationForm.reset();
+    }, 300);
+  }
+
+  // Clear Live Research form
+  clearLiveResearchForm() {
+    this.liveResearchForm.reset();
+    this.paperCountValue.textContent = '5';
+    this.liveResearchStatus.style.display = 'none';
+    this.collectedPapers = [];
+    this.paperSummaries = [];
+  }
+
+  // Display collected research papers
+  displayResearchPapers(data) {
+    // Create or update papers display section
+    let papersSection = document.getElementById('researchPapersSection');
+    
+    if (!papersSection) {
+      // Create the papers section if it doesn't exist
+      papersSection = document.createElement('section');
+      papersSection.id = 'researchPapersSection';
+      papersSection.className = 'results-section';
+      
+      // Insert after the live research form
+      const liveResearchCard = document.querySelector('.input-card');
+      liveResearchCard.parentNode.insertBefore(papersSection, liveResearchCard.nextSibling.nextSibling);
+    }
+    
+    // Generate HTML for papers
+    let papersHTML = `
+      <div class="container">
+        <div class="results-card">
+          <div class="results-header">
+            <h2 class="results-title">🔬 Collected Research Papers</h2>
+            <div class="results-info">
+              <span class="paper-count">${data.paper_count} papers collected</span>
+              <span class="processing-time">⏱️ ${data.processing_time}s</span>
+            </div>
+          </div>
+          <div class="papers-container">
+    `;
+    
+    // Add each paper
+    data.papers.forEach((paper, index) => {
+      const summary = data.summaries[index] || 'Summary not available';
+      const authors = paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? '...' : '');
+      const categories = paper.categories.slice(0, 3).join(', ');
+      
+      papersHTML += `
+        <div class="paper-card">
+          <div class="paper-header">
+            <h3 class="paper-title">${paper.title}</h3>
+            <div class="paper-meta">
+              <span class="paper-date">📅 ${paper.published_date}</span>
+              <span class="paper-categories">🏷️ ${categories}</span>
+            </div>
+          </div>
+          
+          <div class="paper-content">
+            <div class="paper-authors">
+              <strong>Authors:</strong> ${authors}
+            </div>
+            
+            <div class="paper-abstract">
+              <strong>Abstract:</strong> ${paper.abstract.substring(0, 300)}${paper.abstract.length > 300 ? '...' : ''}
+            </div>
+            
+            <div class="paper-summary">
+              <strong>AI Summary:</strong> ${summary}
+            </div>
+            
+            <div class="paper-links">
+              <a href="${paper.arxiv_url}" target="_blank" class="paper-link">
+                🔗 View on arXiv
+              </a>
+              <a href="${paper.pdf_url}" target="_blank" class="paper-link">
+                📄 Download PDF
+              </a>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    papersHTML += `
+          </div>
+          
+          <div class="results-actions">
+            <button class="btn-secondary" onclick="window.print()">
+              <span class="btn-icon">🖨️</span>
+              Print Papers
+            </button>
+            <button class="btn-secondary" id="exportPapersBtn">
+              <span class="btn-icon">💾</span>
+              Export JSON
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Update the section
+    papersSection.innerHTML = papersHTML;
+    papersSection.style.display = 'block';
+    papersSection.classList.add('fade-in');
+    
+    // Add export functionality
+    const exportBtn = document.getElementById('exportPapersBtn');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => {
+        this.exportPapersData(data);
+      });
+    }
+    
+    // Scroll to papers section
+    setTimeout(() => {
+      papersSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  }
+
+  // Export papers data as JSON
+  exportPapersData(data) {
+    const exportData = {
+      query: data.query,
+      collected_at: data.collected_at,
+      paper_count: data.paper_count,
+      processing_time: data.processing_time,
+      papers: data.papers,
+      summaries: data.summaries
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `research_papers_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    this.showSuccess('Research papers exported successfully!');
   }
 }
 
