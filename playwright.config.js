@@ -20,7 +20,7 @@ export default defineConfig({
     video: 'retain-on-failure',
     // Demo mode: slowMo makes actions visible like a real human
     slowMo: process.env.CI ? 0 : 500, // 500ms delay between actions for demo mode
-  },
+  },  
   projects: [
     // Demo project for website testing with Chrome extension - SLOW VISIBLE ACTIONS
     {
