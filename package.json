@@ -7,6 +7,10 @@
     "test": "npx playwright test",
     "test:basic": "npx playwright test tests/basic.spec.js",
     "test:rag": "npx playwright test tests/rag-flow.spec.js",
+    "test:website-extension": "npx playwright test tests/website-rag-with-extension.spec.js",
+    "test:single": "npx playwright test tests/website-rag-with-extension.spec.js",
+    "test:demo": "npx playwright test tests/rag-flow.spec.js",
+    "test:slow": "npx playwright test tests/website-rag-with-extension.spec.js",
     "test:full": "npx playwright test",
     "automate": "npm run test:full",
     "prepare": "husky install"
