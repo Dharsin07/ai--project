@@ -15,7 +15,7 @@
         <nav class="navbar">
             <div class="nav-container">
                 <div class="nav-brand">
-                    <div class="logo">🧠</div>
+                    <div class="logo">RA</div>
                     <div class="brand-text">
                         <h1 class="brand-title">Autonomous Research Assistant</h1>
                         <p class="brand-subtitle">AI-powered research summarization using LLMs & RAG</p>
@@ -23,7 +23,7 @@
                 </div>
                 <div class="nav-controls">
                     <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
-                        <span class="theme-icon">🌙</span>
+                        <span class="theme-icon">Theme</span>
                     </button>
                 </div>
             </div>
@@ -113,38 +113,12 @@
                     <div id="uploadStatus" class="upload-status" style="display: none;"></div>
                 </div>
 
-                <!-- Features Panel -->
-                <div class="features-panel">
-                    <div class="feature-card">
-                        <div class="feature-icon">🌐</div>
-                        <div class="feature-content">
-                            <h3 class="feature-title">Web Search Enabled</h3>
-                            <p class="feature-description">Real-time web search for latest information</p>
-                        </div>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">🔍</div>
-                        <div class="feature-content">
-                            <h3 class="feature-title">RAG-based Retrieval</h3>
-                            <p class="feature-description">Advanced retrieval-augmented generation</p>
-                        </div>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">🤖</div>
-                        <div class="feature-content">
-                            <h3 class="feature-title">AI Summarization</h3>
-                            <p class="feature-description">Intelligent content synthesis and analysis</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
+                
         <!-- Live Research Paper Collector Section -->
         <section class="hero-section">
             <div class="container">
                 <div class="input-card">
-                    <h2 class="card-title">🔬 Live Research Paper Collector</h2>
+                    <h2 class="card-title">Live Research Paper Collector</h2>
                     <p class="card-description">Collect latest research papers from arXiv using AI-powered web automation</p>
                     
                     <form id="liveResearchForm" class="live-research-form">
@@ -184,7 +158,7 @@
                         </div>
 
                         <button type="submit" class="btn-primary" id="liveResearchBtn">
-                            <span class="btn-text">🚀 Collect Papers</span>
+                            <span class="btn-text">Collect Papers</span>
                             <span class="btn-loader" style="display: none;">
                                 <span class="spinner"></span>
                             </span>
@@ -196,7 +170,7 @@
 
                 <!-- Email Confirmation Section -->
                 <div class="input-card" id="emailConfirmationCard" style="display: none;">
-                    <h2 class="card-title">📧 Email Confirmation</h2>
+                    <h2 class="card-title">Email Confirmation</h2>
                     <p class="card-description">Review collected papers and send via email</p>
                     
                     <form id="emailConfirmationForm" class="email-confirmation-form">
@@ -226,13 +200,13 @@
 
                         <div class="form-actions">
                             <button type="submit" class="btn-primary" id="sendEmailBtn">
-                                <span class="btn-text">📧 Send Email</span>
+                                <span class="btn-text">Send Email</span>
                                 <span class="btn-loader" style="display: none;">
                                     <span class="spinner"></span>
                                 </span>
                             </button>
                             <button type="button" class="btn-secondary" id="cancelEmailBtn">
-                                <span class="btn-text">❌ Cancel</span>
+                                <span class="btn-text">Cancel</span>
                             </button>
                         </div>
                     </form>
@@ -279,15 +253,15 @@
                         <h2 class="results-title">Your Answer</h2>
                         <div class="results-actions">
                             <button class="btn-secondary" id="copyBtn">
-                                <span class="btn-icon">📋</span>
+                                <span class="btn-icon">Copy</span>
                                 Copy Answer
                             </button>
                             <button class="btn-secondary" id="downloadBtn">
-                                <span class="btn-icon">📄</span>
+                                <span class="btn-icon">Download</span>
                                 Download PDF
                             </button>
                             <button class="btn-secondary" id="clearBtn">
-                                <span class="btn-icon">🗑️</span>
+                                <span class="btn-icon">Clear</span>
                                 Clear Results
                             </button>
                         </div>
@@ -316,6 +290,36 @@
             </div>
         </section>
     </main>
+    
+
+    <!-- Features Panel -->
+    <section class="features-section">
+        <div class="container">
+            <div class="features-panel">
+                <div class="feature-card">
+                    <div class="feature-icon">Web</div>
+                    <div class="feature-content">
+                        <h3 class="feature-title">Web Search Enabled</h3>
+                        <p class="feature-description">Real-time web search for latest information</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">Search</div>
+                    <div class="feature-content">
+                        <h3 class="feature-title">RAG-based Retrieval</h3>
+                        <p class="feature-description">Advanced retrieval-augmented generation</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">AI</div>
+                    <div class="feature-content">
+                        <h3 class="feature-title">AI Summarization</h3>
+                        <p class="feature-description">Intelligent content synthesis and analysis</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <!-- Footer -->
     <footer class="footer">

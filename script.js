@@ -168,7 +168,7 @@ class ResearchAssistant {
 
   // Update theme icon
   updateThemeIcon(theme) {
-    this.themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+    this.themeIcon.textContent = theme === 'dark' ? 'Light' : 'Dark';
   }
 
   // Validate form input

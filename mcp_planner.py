@@ -29,9 +29,8 @@ class MCPPlanner:
             "collect", "latest", "recent", "new", "current", "up-to-date",
             "papers", "research papers", "arxiv", "scholar", "publications",
             "find papers", "get papers", "search papers", "latest research",
-            "ai", "artificial intelligence", "machine learning", "deep learning",
-            "neural networks", "computer vision", "nlp", "natural language",
-            "security", "ethics", "privacy", "robotics", "automation", "data science"
+            "study", "studies", "research", "article", "articles", "journal",
+            "publication", "literature", "review", "survey", "analysis"
         ]
         
         # Number extraction patterns
@@ -83,17 +82,10 @@ class MCPPlanner:
         score = 0.0
         keyword_matches = 0
         
-        # Higher score for AI-related keywords
-        ai_keywords = ["ai", "artificial intelligence", "machine learning", "deep learning", 
-                      "neural networks", "computer vision", "nlp", "natural language"]
-        
         for keyword in self.live_collection_keywords:
             if keyword in query:
                 keyword_matches += 1
-                if keyword in ai_keywords:
-                    score += 0.4  # Higher score for AI keywords
-                else:
-                    score += 0.25
+                score += 0.3  # Equal score for all research keywords
         
         # Bonus for multiple keywords
         if keyword_matches >= 2:
@@ -106,9 +98,9 @@ class MCPPlanner:
         if any(pattern in query for pattern in ["papers", "arxiv", "research"]):
             score += 0.1
         
-        # Minimum score for any AI-related query
-        if any(keyword in query for keyword in ai_keywords):
-            score = max(score, 0.5)
+        # Minimum score for any substantive query (3+ words)
+        if len(query.split()) >= 3:
+            score += 0.2
         
         return min(score, 1.0)
     

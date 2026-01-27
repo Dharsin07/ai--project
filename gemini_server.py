@@ -5,6 +5,8 @@ import time
 import asyncio
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import random
@@ -17,7 +19,7 @@ from arxiv_scraper import RealArXivScraper
 from mock_arxiv_scraper import MockArXivScraper
 from email_sender import EmailSender
 
-app = FastAPI(title="AI Research Assistant API", description="Powered by Google Gemini API")
+app = FastAPI(title="AI Research Assistant API", description="Powered by Groq API")
 
 # Add CORS middleware
 app.add_middleware(
@@ -28,25 +30,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files for CSS and JS
+app.mount("/static", StaticFiles(directory="."), name="static")
+
+# Add specific routes for common static files
+@app.get("/style.css")
+async def get_style_css():
+    return FileResponse("style.css", media_type="text/css")
+
+@app.get("/script.js")
+async def get_script_js():
+    return FileResponse("script.js", media_type="application/javascript")
+
 # Global storage for PDF chunks
 stored_chunks = []
 stored_filename = ""
 
 # Get API key from environment or .env file
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+if not GROQ_API_KEY:
     try:
-        with open('.env', 'r') as f:
+        with open('.env', 'r', encoding='utf-8-sig') as f:  # Use utf-8-sig to handle BOM
             for line in f:
-                if line.startswith('GEMINI_API_KEY='):
-                    GEMINI_API_KEY = line.split('=', 1)[1].strip()
+                if line.startswith('GROQ_API_KEY='):
+                    GROQ_API_KEY = line.split('=', 1)[1].strip()
                     break
     except:
         pass
 
-if not GEMINI_API_KEY or GEMINI_API_KEY == "your_api_key_here":
-    print("⚠️  WARNING: No valid Gemini API key found. Please set GEMINI_API_KEY in your .env file")
-    GEMINI_API_KEY = None
+if not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here":
+    print("⚠️  WARNING: No valid Groq API key found. Please set GROQ_API_KEY in your .env file")
+    GROQ_API_KEY = None
 
 # Initialize MCP Planner
 mcp_planner = MCPPlanner()
@@ -157,29 +171,28 @@ MOCK_SOURCES = [
     }
 ]
 
-def call_gemini_api(prompt: str) -> str:
-    """Call Gemini API using REST API with retry logic"""
-    if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="Gemini API key not configured")
+def call_groq_api(prompt: str) -> str:
+    """Call Groq API using REST API with retry logic"""
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=500, detail="Groq API key not configured")
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    url = "https://api.groq.com/openai/v1/chat/completions"
     
     headers = {
         'Content-Type': 'application/json',
+        'Authorization': f'Bearer {GROQ_API_KEY}'
     }
     
     data = {
-        "contents": [{
-            "parts": [{
-                "text": prompt
-            }]
-        }],
-        "generationConfig": {
-            "temperature": 0.7,
-            "topK": 40,
-            "topP": 0.95,
-            "maxOutputTokens": 8192,
-        }
+        "model": "llama-3.1-8b-instant",  # Groq's Llama 3.1 model
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.7,
+        "max_tokens": 8192
     }
     
     max_retries = 3
@@ -203,20 +216,20 @@ def call_gemini_api(prompt: str) -> str:
             
             result = response.json()
             
-            if 'candidates' in result and len(result['candidates']) > 0:
-                content = result['candidates'][0]['content']['parts'][0]['text']
+            if 'choices' in result and len(result['choices']) > 0:
+                content = result['choices'][0]['message']['content']
                 return content.strip()
             else:
-                raise HTTPException(status_code=500, detail="No response from Gemini API")
+                raise HTTPException(status_code=500, detail="No response from Groq API")
                 
         except requests.exceptions.RequestException as e:
             if attempt == max_retries - 1:
-                print(f"Gemini API error: {e}")
-                raise HTTPException(status_code=500, detail=f"Gemini API call failed: {str(e)}")
+                print(f"Groq API error: {e}")
+                raise HTTPException(status_code=500, detail=f"Groq API call failed: {str(e)}")
             print(f"⚠️ Request failed (attempt {attempt + 1}/{max_retries}): {e}")
             time.sleep(base_delay)
     
-    raise HTTPException(status_code=500, detail="Failed to get response from Gemini API after multiple retries")
+    raise HTTPException(status_code=500, detail="Failed to get response from Groq API after multiple retries")
 
 def generate_mock_sources(topic: str, count: int) -> List[Source]:
     """Generate mock sources based on the topic"""
@@ -373,8 +386,8 @@ async def summarize(req: SummarizeRequest):
         Summary:
         """
         
-        if GEMINI_API_KEY:
-            summary = call_gemini_api(prompt)
+        if GROQ_API_KEY:
+            summary = call_groq_api(prompt)
         else:
             # Fallback mock response
             summary = f"This text discusses important concepts and provides valuable information. The main points include key details about the topic, supporting evidence, and conclusions drawn from the analysis. The content appears to be well-structured and informative."
@@ -403,45 +416,49 @@ async def generate_research_brief(request: ResearchRequest):
         if not 1 <= request.source_count <= 10:
             raise HTTPException(status_code=400, detail="Source count must be between 1 and 10")
         
-        # Generate summary using Gemini
+        # Generate summary using Groq AI, focusing on research papers
         if request.summary_type == "short":
             prompt = f"""
-            Answer this question accurately and concisely: "{request.topic}"
+            Based on current research literature, provide a concise answer to: "{request.topic}"
+            
+            Focus on recent findings, key insights, and significant developments in this research area.
+            Reference actual studies and research findings where relevant.
             
             Guidelines:
-            - Provide a direct, accurate answer
+            - Provide evidence-based, research-focused answer
             - Be specific and factual
             - Keep it under 150 words
-            - Focus on most important information
-            - Use clear, accessible language
+            - Focus on most important research findings
+            - Use academic tone but accessible language
             
-            Question: {request.topic}
-            Answer:
+            Research Question: {request.topic}
+            Research Summary:
             """
         else:
             prompt = f"""
-            Provide a comprehensive answer to this question: "{request.topic}"
+            Provide a comprehensive research overview for: "{request.topic}"
             
             Structure your response to include:
-            1. **Direct Answer**: Clear response to question
-            2. **Key Details**: Important supporting information
-            3. **Context**: Background or relevant context if needed
-            4. **Examples**: Specific examples if applicable
-            5. **Additional Insights**: Related information that adds value
+            1. **Research Overview**: Current state of research in this area
+            2. **Key Findings**: Most significant recent discoveries
+            3. **Methodologies**: Common research approaches and methods
+            4. **Applications**: Practical applications and implications
+            5. **Future Directions**: Emerging trends and research gaps
             
             Guidelines:
-            - Be accurate and factual
+            - Focus on actual research evidence and findings
             - Provide depth and detail (300-500 words)
-            - Use clear headings and structure
-            - Be comprehensive but focused
+            - Use clear academic structure
+            - Reference specific research areas and developments
+            - Be comprehensive but research-focused
             
             Question: {request.topic}
             Detailed Answer:
             """
         
-        if GEMINI_API_KEY:
+        if GROQ_API_KEY:
             try:
-                summary_text = call_gemini_api(prompt)
+                summary_text = call_groq_api(prompt)
             except HTTPException as e:
                 if e.status_code == 429:
                     # Rate limit hit - use fallback
@@ -457,8 +474,36 @@ async def generate_research_brief(request: ResearchRequest):
         
         print(f"✅ Generated response for: {request.topic}")
         
-        # Generate sources
-        sources = generate_mock_sources(request.topic, request.source_count)
+        # Collect real research papers using arXiv scraper
+        try:
+            # Initialize the arXiv scraper
+            scraper = RealArXivScraper()
+            
+            # Collect real papers
+            papers = await scraper.collect_papers(
+                topic=request.topic,
+                paper_count=request.source_count,
+                sort_by="relevance"
+            )
+            
+            print(f"📚 Found {len(papers)} real research papers from arXiv")
+            
+            # Convert papers to Source format
+            sources = []
+            for paper in papers:
+                source = Source(
+                    title=paper.title,
+                    authors=", ".join(paper.authors[:3]) + (" et al." if len(paper.authors) > 3 else ""),
+                    url=paper.arxiv_url,
+                    year=int(paper.published_date.split('-')[0]) if paper.published_date else 2024,
+                    relevance_score=0.8  # Default relevance score
+                )
+                sources.append(source)
+                
+        except Exception as e:
+            print(f"⚠️ Error collecting real papers: {e}")
+            # Fallback to mock sources if arXiv fails
+            sources = generate_mock_sources(request.topic, request.source_count)
         
         # Extract keywords from the AI response
         keywords = extract_keywords(summary_text)
@@ -550,7 +595,7 @@ async def query_rag(request: RAGQueryRequest):
         print(f"📝 Context length: {len(context)} characters")
         
         # Generate answer using Gemini API
-        if GEMINI_API_KEY:
+        if GROQ_API_KEY:
             try:
                 prompt = f"""
                 Based on the following document context, please answer the question accurately and specifically.
@@ -570,7 +615,7 @@ async def query_rag(request: RAGQueryRequest):
                 Answer:
                 """
                 
-                answer = call_gemini_api(prompt)
+                answer = call_groq_api(prompt)
             except HTTPException as e:
                 if e.status_code == 429:
                     # Rate limit hit - use fallback
@@ -821,7 +866,7 @@ async def get_email_status():
 async def generate_paper_summary(paper: PaperData) -> str:
     """Generate 2-3 line summary of a research paper"""
     try:
-        if GEMINI_API_KEY:
+        if GROQ_API_KEY:
             prompt = f"""
             Summarize this research paper in 2-3 concise lines:
             
@@ -839,7 +884,7 @@ async def generate_paper_summary(paper: PaperData) -> str:
             """
             
             try:
-                summary = call_gemini_api(prompt)
+                summary = call_groq_api(prompt)
                 return summary.strip()
             except HTTPException as e:
                 if e.status_code == 429:
@@ -914,7 +959,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "gemini_status": "connected" if GEMINI_API_KEY else "no_api_key",
+        "groq_status": "connected" if GROQ_API_KEY else "no_api_key",
         "rag_status": "ready" if stored_chunks else "no_document",
         "current_document": stored_filename if stored_filename else None,
         "chunks_stored": len(stored_chunks)
@@ -922,13 +967,8 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
-    return {
-        "message": "AI Research Assistant API",
-        "version": "1.0.0",
-        "model": "Google Gemini API" if GEMINI_API_KEY else "Fallback Mode",
-        "status": "running"
-    }
+    """Serve the frontend HTML file"""
+    return FileResponse("index.html")
 
 if __name__ == "__main__":
     import uvicorn
@@ -939,11 +979,11 @@ if __name__ == "__main__":
     
     print(f"🚀 Starting AI Research Assistant API")
     print(f"📍 Server: http://{host}:{port}")
-    print(f"🤖 AI Model: {'Google Gemini API' if GEMINI_API_KEY else 'Fallback Mode'}")
+    print(f"🤖 AI Model: {'Groq Llama3.1-8b' if GROQ_API_KEY else 'Fallback Mode'}")
     print(f"📚 API Docs: http://{host}:{port}/docs")
     
-    if not GEMINI_API_KEY:
-        print("⚠️  WARNING: Running in fallback mode. Set GEMINI_API_KEY in .env for AI responses.")
+    if not GROQ_API_KEY:
+        print("⚠️  WARNING: Running in fallback mode. Set GROQ_API_KEY in .env for AI responses.")
     
     uvicorn.run(
         "gemini_server:app",
