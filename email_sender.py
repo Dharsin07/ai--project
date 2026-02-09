@@ -1,7 +1,7 @@
 """
 Email Sender for Live Research Paper Collector
 Handles actual email sending functionality
-"""
+"""    
 
 import smtplib
 import ssl
