@@ -1,5 +1,5 @@
 // Autonomous Research Assistant - JavaScript Module
-// Main application logic for form handling, API simulation, and UI interactions
+// Main application logic for form handling, API simulation, and UI interactions     
 
 class ResearchAssistant {
   constructor() {
