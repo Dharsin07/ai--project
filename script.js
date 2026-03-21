@@ -219,7 +219,7 @@ class ResearchAssistant {
       
     } catch (error) {
       console.error('❌ API call failed:', error);
-      this.showError('Failed to connect to AI service. Please check if the backend is running on http://localhost:8000');
+      this.showError('Failed to connect to AI service. Please check if the backend is running on http://localhost:8001');
     } finally {
       this.setLoadingState(false);
     }
@@ -259,7 +259,7 @@ class ResearchAssistant {
       
       // First test if backend is reachable
       console.log('🔍 Testing backend connection...');
-      const healthResponse = await fetch('http://localhost:8000/health');
+      const healthResponse = await fetch('http://localhost:8001/health');
       console.log('📡 Health check status:', healthResponse.status);
       
       if (!healthResponse.ok) {
@@ -270,7 +270,7 @@ class ResearchAssistant {
       console.log('💚 Backend health:', healthData);
       
       // Now call the research endpoint
-      const response = await fetch('http://localhost:8000/research', {
+      const response = await fetch('http://localhost:8001/research', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -307,7 +307,7 @@ class ResearchAssistant {
       
       // Additional debugging info
       if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        console.error('🌐 Network error - Backend may not be running on http://localhost:8000');
+        console.error('🌐 Network error - Backend may not be running on http://localhost:8001');
       }
       
       throw error;
@@ -342,7 +342,10 @@ class ResearchAssistant {
     // Display summary with highlighted keywords
     let summaryHTML = response.summary;
     response.keywords.forEach(keyword => {
-      const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+      // Skip empty or invalid keywords
+      if (!keyword || keyword.trim().length === 0) return;
+      
+      const regex = new RegExp(`\\b${keyword.trim()}\\b`, 'gi');
       summaryHTML = summaryHTML.replace(regex, `<span class="keyword">${keyword}</span>`);
     });
     this.summaryContent.innerHTML = summaryHTML;
@@ -585,7 +588,7 @@ class ResearchAssistant {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('http://localhost:8000/rag/upload', {
+      const response = await fetch('http://localhost:8001/rag/upload', {
         method: 'POST',
         body: formData
       });
@@ -638,7 +641,7 @@ class ResearchAssistant {
     this.setRAGQueryLoadingState(true);
 
     try {
-      const response = await fetch('http://localhost:8000/rag/query', {
+      const response = await fetch('http://localhost:8001/rag/query', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -754,7 +757,7 @@ class ResearchAssistant {
     try {
       console.log('🔍 Starting live research collection:', { query, paperCount, sortBy });
 
-      const response = await fetch('http://localhost:8000/live-research/collect', {
+      const response = await fetch('http://localhost:8001/live-research/collect', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -816,7 +819,7 @@ class ResearchAssistant {
     try {
       console.log('📧 Sending research email:', { recipientEmail, subject });
 
-      const response = await fetch('http://localhost:8000/live-research/send-email', {
+      const response = await fetch('http://localhost:8001/live-research/send-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
