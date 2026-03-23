@@ -219,7 +219,7 @@ class ResearchAssistant {
       
     } catch (error) {
       console.error('❌ API call failed:', error);
-      this.showError('Failed to connect to AI service. Please check if the backend is running on http://localhost:8001');
+      this.showError('Failed to connect to AI service. Please check if the backend is running on http://localhost:8002');
     } finally {
       this.setLoadingState(false);
     }
@@ -259,7 +259,7 @@ class ResearchAssistant {
       
       // First test if backend is reachable
       console.log('🔍 Testing backend connection...');
-      const healthResponse = await fetch('http://localhost:8001/health');
+      const healthResponse = await fetch('http://localhost:8002/health');
       console.log('📡 Health check status:', healthResponse.status);
       
       if (!healthResponse.ok) {
@@ -270,7 +270,7 @@ class ResearchAssistant {
       console.log('💚 Backend health:', healthData);
       
       // Now call the research endpoint
-      const response = await fetch('http://localhost:8001/research', {
+      const response = await fetch('http://localhost:8002/research', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -307,7 +307,7 @@ class ResearchAssistant {
       
       // Additional debugging info
       if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        console.error('🌐 Network error - Backend may not be running on http://localhost:8001');
+        console.error('🌐 Network error - Backend may not be running on http://localhost:8002');
       }
       
       throw error;
@@ -341,26 +341,30 @@ class ResearchAssistant {
 
     // Display summary with highlighted keywords
     let summaryHTML = response.summary;
-    response.keywords.forEach(keyword => {
-      // Skip empty or invalid keywords
-      if (!keyword || keyword.trim().length === 0) return;
-      
-      const regex = new RegExp(`\\b${keyword.trim()}\\b`, 'gi');
-      summaryHTML = summaryHTML.replace(regex, `<span class="keyword">${keyword}</span>`);
-    });
+    if (response.keywords && Array.isArray(response.keywords)) {
+      response.keywords.forEach(keyword => {
+        // Skip empty or invalid keywords
+        if (!keyword || keyword.trim().length === 0) return;
+        
+        const regex = new RegExp(`\\b${keyword.trim()}\\b`, 'gi');
+        summaryHTML = summaryHTML.replace(regex, `<span class="keyword">${keyword}</span>`);
+      });
+    }
     this.summaryContent.innerHTML = summaryHTML;
 
     // Display sources
     this.sourcesList.innerHTML = '';
-    response.sources.forEach(source => {
-      const li = document.createElement('li');
-      li.innerHTML = `
-        <strong>${source.title}</strong><br>
-        <span style="color: var(--text-secondary); font-size: var(--font-size-sm);">${source.authors}</span><br>
-        <a href="${source.url}" target="_blank" rel="noopener noreferrer">${source.url}</a>
-      `;
-      this.sourcesList.appendChild(li);
-    });
+    if (response.sources && Array.isArray(response.sources)) {
+      response.sources.forEach(source => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <strong>${source.title}</strong><br>
+          <span style="color: var(--text-secondary); font-size: var(--font-size-sm);">${source.authors}</span><br>
+          <a href="${source.url}" target="_blank" rel="noopener noreferrer">${source.url}</a>
+        `;
+        this.sourcesList.appendChild(li);
+      });
+    }
 
     // Show results section with animation
     this.resultsSection.style.display = 'block';
@@ -588,7 +592,7 @@ class ResearchAssistant {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('http://localhost:8001/rag/upload', {
+      const response = await fetch('http://localhost:8002/rag/upload', {
         method: 'POST',
         body: formData
       });
@@ -641,7 +645,7 @@ class ResearchAssistant {
     this.setRAGQueryLoadingState(true);
 
     try {
-      const response = await fetch('http://localhost:8001/rag/query', {
+      const response = await fetch('http://localhost:8002/rag/query', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -713,18 +717,54 @@ class ResearchAssistant {
     this.researchTopicDisplay.textContent = data.question;
 
     // Display answer
-    this.summaryContent.innerHTML = `<div class="rag-answer">${data.answer}</div>`;
+    const confidence = data.confidence_score ? (data.confidence_score * 100).toFixed(1) : null;
+    const processingTime = data.processing_time_ms ? data.processing_time_ms.toFixed(0) : null;
+    const fallbackUsed = data.fallback_used;
+    
+    let answerHtml = `<div class="rag-answer">${data.answer}</div>`;
+    
+    // Add confidence and processing info
+    if (confidence || processingTime) {
+      answerHtml += `<div style="margin-top: 10px; font-size: var(--font-size-sm); color: var(--text-secondary);">`;
+      if (confidence) {
+        answerHtml += `<span style="color: ${confidence > 70 ? 'var(--success)' : confidence > 40 ? 'var(--warning)' : 'var(--error)'}">Confidence: ${confidence}%</span>`;
+      }
+      if (confidence && processingTime) {
+        answerHtml += ` | `;
+      }
+      if (processingTime) {
+        answerHtml += `Processing Time: ${processingTime}ms`;
+      }
+      if (fallbackUsed) {
+        answerHtml += ` | <span style="color: var(--warning)">Fallback Response</span>`;
+      }
+      answerHtml += `</div>`;
+    }
+    
+    this.summaryContent.innerHTML = answerHtml;
 
-    // Display matched chunks as sources
+    // Display retrieved chunks as sources
     this.sourcesList.innerHTML = '';
-    data.matched_chunks.forEach((chunk, index) => {
+    const chunks = data.retrieved_chunks || data.matched_chunks || [];
+    
+    if (Array.isArray(chunks)) {
+      chunks.forEach((chunk, index) => {
+        const li = document.createElement('li');
+        const chunkContent = chunk.content || chunk; // Handle both old and new API formats
+        const similarity = chunk.metadata?.similarity_score;
+        
+        li.innerHTML = `
+          <strong>Document Chunk ${index + 1}</strong>
+          ${similarity ? `<span style="color: var(--accent); font-size: var(--font-size-sm);"> (Similarity: ${(similarity * 100).toFixed(1)}%)</span>` : ''}<br>
+          <span style="color: var(--text-secondary); font-size: var(--font-size-sm);">${chunkContent.substring(0, 200)}...</span>
+        `;
+        this.sourcesList.appendChild(li);
+      });
+    } else {
       const li = document.createElement('li');
-      li.innerHTML = `
-        <strong>Document Chunk ${index + 1}</strong><br>
-        <span style="color: var(--text-secondary); font-size: var(--font-size-sm);">${chunk.substring(0, 200)}...</span>
-      `;
+      li.innerHTML = '<span style="color: var(--text-secondary);">No source chunks found</span>';
       this.sourcesList.appendChild(li);
-    });
+    }
 
     // Show results section
     this.resultsSection.style.display = 'block';
@@ -977,7 +1017,8 @@ class ResearchAssistant {
     `;
     
     // Add each paper
-    data.papers.forEach((paper, index) => {
+    if (data.papers && Array.isArray(data.papers)) {
+      data.papers.forEach((paper, index) => {
       const summary = data.summaries[index] || 'Summary not available';
       const authors = paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? '...' : '');
       const categories = paper.categories.slice(0, 3).join(', ');
@@ -1017,6 +1058,7 @@ class ResearchAssistant {
         </div>
       `;
     });
+    }
     
     papersHTML += `
           </div>
